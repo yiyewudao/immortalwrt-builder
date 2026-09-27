@@ -29,7 +29,8 @@ LuCI → **系统 → 备份/升级** → 上传新构建的固件 → 勾选 **
 - OpenClash (构建时自动打入最新 Meta 内核 + GeoIP/GeoSite)
 - Lucky (动态域名 / 反向代理, 中文界面)
 - 应用商店 luci-app-store
-- Docker (dockerman 中文界面)
+- Docker (dockerman 中文界面, 构建时自动配好防火墙: LAN 可访问容器、容器可上网)
+- IPv6: 官方底包自带, 开机即用 (未做任何精简)
 - 首次开机自动设置后台 IP、时区 Asia/Shanghai
 
 ## 致谢
