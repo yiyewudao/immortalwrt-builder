@@ -9,7 +9,7 @@
    - ImmortalWrt 版本 (25.12.x)
    - 固件大小 1G / 2G / 3G / 4G (Docker 需要留空间, 建议 2G 起)
    - 默认后台 IP (默认 192.168.50.2)
-   - 插件开关: Nikki / OpenClash / PassWall / PassWall2 / Lucky / 应用商店 / Docker / QuickFile
+   - 插件开关: Nikki / OpenClash / PassWall / PassWall2 / Lucky / 应用商店 / Docker / QuickFile / TG 打卡依赖
    - 额外软件包 (可选, 空格分隔)
 3. 等待约 10~30 分钟, 到 **Releases** 下载 `*-squashfs-combined-efi.img.gz`
 4. 写盘启动 (支持 UEFI), 后台 `http://你设置的IP`, 用户名 root, 首次无密码

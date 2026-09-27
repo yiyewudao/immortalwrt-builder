@@ -8,7 +8,11 @@ PACKAGES="$PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-confi
 PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn luci-i18n-ttyd-zh-cn luci-i18n-diskman-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn luci-i18n-attendedsysupgrade-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
-PACKAGES="$PACKAGES python3 python3-pip"
+
+# TG 打卡依赖 (可选, 默认开): python3/pip 打进固件, 升级后 run.sh 可自愈重装 telethon
+if [ "$ENABLE_TGCHECKIN" = "true" ]; then
+  PACKAGES="$PACKAGES python3 python3-pip"
+fi
 
 # ---- 可选插件 ----
 if [ "$ENABLE_NIKKI" = "true" ]; then
