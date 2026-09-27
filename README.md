@@ -60,6 +60,8 @@ LuCI → **系统 → 备份/升级** → 上传新构建的固件 → 勾选 **
 
 ## 致谢
 
+感谢 [ImmortalWrt](https://immortalwrt.org/) 官方项目提供固件源码与 ImageBuilder。
+
 构建思路与第三方 apk 仓库借鉴自 [wukongdaily/ImmortalWrt-ImageBuilder](https://github.com/wukongdaily/ImmortalWrt-ImageBuilder)。
 
 本项目特色内容由 Muse 支持编写，邀请码：Q3P6O6
