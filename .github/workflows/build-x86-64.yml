@@ -1,0 +1,130 @@
+name: 构建 ImmortalWrt x86-64 固件
+
+on:
+  workflow_dispatch:
+    inputs:
+      immwrt_version:
+        description: "ImmortalWrt 版本 (自动从官方拉取对应 ImageBuilder)"
+        required: true
+        default: "25.12.1"
+        type: choice
+        options:
+          - 25.12.0
+          - 25.12.1
+          - 25.12.2
+      firmware_size:
+        description: "固件大小 (含 Docker 可用空间)"
+        required: true
+        default: "2G"
+        type: choice
+        options:
+          - 1G
+          - 2G
+          - 3G
+          - 4G
+      lan_ip:
+        description: "默认后台管理 IP"
+        required: true
+        default: "192.168.50.2"
+      enable_nikki:
+        description: "集成 Nikki (Mihomo 透明代理)"
+        required: false
+        default: true
+        type: boolean
+      enable_openclash:
+        description: "集成 OpenClash"
+        required: false
+        default: true
+        type: boolean
+      enable_lucky:
+        description: "集成 Lucky (动态域名/反代)"
+        required: false
+        default: true
+        type: boolean
+      enable_store:
+        description: "集成 应用商店 (luci-app-store)"
+        required: false
+        default: true
+        type: boolean
+      enable_docker:
+        description: "集成 Docker"
+        required: false
+        default: true
+        type: boolean
+      extra_packages:
+        description: "额外软件包 (空格分隔, 如: luci-i18n-samba4-zh-cn)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+
+      - name: 生成首次开机配置 (后台IP/时区/主机名)
+        run: |
+          mkdir -p files/etc/uci-defaults
+          cat > files/etc/uci-defaults/99-custom << EOF
+          #!/bin/sh
+          uci set network.lan.ipaddr='${{ inputs.lan_ip }}'
+          uci set system.@system[0].hostname='ImmortalWrt'
+          uci set system.@system[0].timezone='CST-8'
+          uci set system.@system[0].zonename='Asia/Shanghai'
+          uci commit system
+          uci commit network
+          exit 0
+          EOF
+          chmod +x files/etc/uci-defaults/99-custom
+          echo "后台 IP: ${{ inputs.lan_ip }}"
+
+      - name: 用官方 ImageBuilder 构建固件
+        run: |
+          case "${{ inputs.firmware_size }}" in
+            1G) ROOTFS=1024 ;;
+            2G) ROOTFS=2048 ;;
+            3G) ROOTFS=3072 ;;
+            4G) ROOTFS=4096 ;;
+          esac
+          echo "固件大小: ${{ inputs.firmware_size }} (${ROOTFS}MB)"
+          docker run --rm \
+            -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
+            -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
+            -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
+            -v "${{ github.workspace }}/x86-64/build.sh:/home/build/immortalwrt/build.sh" \
+            -e ROOTFS_SIZE=$ROOTFS \
+            -e ENABLE_NIKKI=${{ inputs.enable_nikki }} \
+            -e ENABLE_OPENCLASH=${{ inputs.enable_openclash }} \
+            -e ENABLE_LUCKY=${{ inputs.enable_lucky }} \
+            -e ENABLE_STORE=${{ inputs.enable_store }} \
+            -e ENABLE_DOCKER=${{ inputs.enable_docker }} \
+            -e EXTRA_PACKAGES="${{ inputs.extra_packages }}" \
+            immortalwrt/imagebuilder:x86-64-openwrt-${{ inputs.immwrt_version }} \
+            /bin/bash /home/build/immortalwrt/build.sh
+
+      - name: 生成固件信息
+        run: |
+          cat > router-info.md << EOF
+          ## 📡 固件信息
+          - 版本: ImmortalWrt ${{ inputs.immwrt_version }} (x86-64, UEFI)
+          - 固件大小: ${{ inputs.firmware_size }}
+          - 🏠 后台地址: http://${{ inputs.lan_ip }} (用户名 root, 首次无密码)
+          - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }}
+
+          ## ⬆️ 一键升级
+          旧固件升级: LuCI → 系统 → 备份/升级 → 上传本固件 → 勾选"保留配置" → 升级, 配置不丢失。
+          EOF
+          cat router-info.md
+
+      - name: 发布到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: x86-64-autobuild
+          name: "x86-64 自动构建"
+          body_path: router-info.md
+          files: |
+            ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined-efi.img.gz
