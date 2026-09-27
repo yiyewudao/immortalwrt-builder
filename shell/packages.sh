@@ -8,6 +8,7 @@ PACKAGES="$PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-confi
 PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn luci-i18n-ttyd-zh-cn luci-i18n-diskman-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn luci-i18n-attendedsysupgrade-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
+PACKAGES="$PACKAGES python3 python3-pip"
 
 # ---- 可选插件 ----
 if [ "$ENABLE_NIKKI" = "true" ]; then
