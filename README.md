@@ -9,7 +9,7 @@
    - ImmortalWrt 版本 (25.12.x)
    - 固件大小 1G / 2G / 3G / 4G (Docker 需要留空间, 建议 2G 起)
    - 默认后台 IP (默认 192.168.50.2)
-   - 插件开关: Nikki / OpenClash / Lucky / 应用商店 / Docker
+   - 插件开关: Nikki / OpenClash / PassWall / PassWall2 / Lucky / 应用商店 / Docker / QuickFile
    - 额外软件包 (可选, 空格分隔)
 3. 等待约 10~30 分钟, 到 **Releases** 下载 `*-squashfs-combined-efi.img.gz`
 4. 写盘启动 (支持 UEFI), 后台 `http://你设置的IP`, 用户名 root, 首次无密码
@@ -36,9 +36,13 @@ LuCI → **系统 → 备份/升级** → 上传新构建的固件 → 勾选 **
 - Argon 主题 (中文)、TTYD 终端、磁盘管理、软件包管理(中文)
 - Nikki (Mihomo 透明代理, 中文界面)
 - OpenClash (构建时自动打入最新 Meta 内核 + GeoIP/GeoSite)
+- PassWall / PassWall2 (中文界面, 自带 xray/sing-box 内核)
 - Lucky (动态域名 / 反向代理, 中文界面)
 - 应用商店 luci-app-store
 - Docker (dockerman 中文界面, 构建时自动配好防火墙: LAN 可访问容器、容器可上网)
+- QuickFile (文件管理)
+
+> 代理类插件 (Nikki / OpenClash / PassWall / PassWall2) 装多个没问题, 实际使用时只启用一个做透明代理即可。
 - IPv6: 官方底包自带, 开机即用 (未做任何精简)
 - 首次开机自动设置后台 IP、时区 Asia/Shanghai
 

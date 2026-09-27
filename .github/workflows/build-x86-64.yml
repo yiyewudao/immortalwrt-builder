@@ -47,6 +47,21 @@ on:
         required: false
         default: true
         type: boolean
+      enable_passwall:
+        description: "集成 PassWall"
+        required: false
+        default: true
+        type: boolean
+      enable_passwall2:
+        description: "集成 PassWall2"
+        required: false
+        default: true
+        type: boolean
+      enable_quickfile:
+        description: "集成 QuickFile (文件管理)"
+        required: false
+        default: true
+        type: boolean
       extra_packages:
         description: "额外软件包 (空格分隔, 如: luci-i18n-samba4-zh-cn)"
         required: false
@@ -87,6 +102,9 @@ jobs:
             -e ENABLE_LUCKY=${{ inputs.enable_lucky }} \
             -e ENABLE_STORE=${{ inputs.enable_store }} \
             -e ENABLE_DOCKER=${{ inputs.enable_docker }} \
+            -e ENABLE_PASSWALL=${{ inputs.enable_passwall }} \
+            -e ENABLE_PASSWALL2=${{ inputs.enable_passwall2 }} \
+            -e ENABLE_QUICKFILE=${{ inputs.enable_quickfile }} \
             -e EXTRA_PACKAGES="${{ inputs.extra_packages }}" \
             immortalwrt/imagebuilder:x86-64-openwrt-${{ inputs.immwrt_version }} \
             /bin/bash /home/build/immortalwrt/build.sh
@@ -98,7 +116,7 @@ jobs:
           - 版本: ImmortalWrt ${{ inputs.immwrt_version }} (x86-64, UEFI)
           - 固件大小: ${{ inputs.firmware_size }}
           - 🏠 后台地址: http://${{ inputs.lan_ip }} (用户名 root, 首次无密码)
-          - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }}
+          - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / PassWall=${{ inputs.enable_passwall }} / PassWall2=${{ inputs.enable_passwall2 }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }} / QuickFile=${{ inputs.enable_quickfile }}
 
           ## ⬆️ 一键升级
           旧固件升级: LuCI → 系统 → 备份/升级 → 上传本固件 → 勾选"保留配置" → 升级, 配置不丢失。

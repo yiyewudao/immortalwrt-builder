@@ -22,6 +22,18 @@ if [ "$ENABLE_LUCKY" = "true" ]; then
   PACKAGES="$PACKAGES luci-app-lucky lucky luci-i18n-lucky-zh-cn"
 fi
 
+if [ "$ENABLE_PASSWALL" = "true" ]; then
+  PACKAGES="$PACKAGES geoview xray-core sing-box hysteria luci-i18n-passwall-zh-cn"
+fi
+
+if [ "$ENABLE_PASSWALL2" = "true" ]; then
+  PACKAGES="$PACKAGES geoview xray-core sing-box hysteria kmod-nft-socket kmod-nft-tproxy luci-app-passwall2 luci-i18n-passwall2-zh-cn"
+fi
+
+if [ "$ENABLE_QUICKFILE" = "true" ]; then
+  PACKAGES="$PACKAGES bash quickfile luci-app-quickfile luci-i18n-quickfile-zh-cn"
+fi
+
 if [ "$ENABLE_STORE" = "true" ]; then
   PACKAGES="$PACKAGES luci-app-store"
 fi
