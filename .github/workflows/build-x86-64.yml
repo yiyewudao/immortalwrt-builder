@@ -4,14 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       immwrt_version:
-        description: "ImmortalWrt 版本 (自动从官方拉取对应 ImageBuilder)"
+        description: "ImmortalWrt 版本 (如 25.12.1 / 25.12.2, 自动检查时自动填入)"
         required: true
         default: "25.12.1"
-        type: choice
-        options:
-          - 25.12.0
-          - 25.12.1
-          - 25.12.2
+        type: string
       firmware_size:
         description: "固件大小 (含 Docker 可用空间)"
         required: true
@@ -117,3 +113,11 @@ jobs:
           body_path: router-info.md
           files: |
             ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined-efi.img.gz
+
+      - name: 记录已构建版本 (供自动检查用)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "${{ inputs.immwrt_version }}" > .last-built-version
+          git add .last-built-version
+          git diff --cached --quiet || (git commit -m "记录已构建版本: ${{ inputs.immwrt_version }}" && git push)

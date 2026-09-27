@@ -1,0 +1,58 @@
+name: 检查 ImmortalWrt 新版本
+
+# 每天 11:00 (北京时间) 检查官方 ImageBuilder 是否有新版本
+# 有新版 (含大版本) 自动触发构建, 构建成功后固件进 Releases
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+
+      - name: 检查官方是否有新版本
+        id: check
+        run: |
+          CURRENT=$(tr -d ' \n' < .last-built-version)
+          export CURRENT
+          echo "当前已构建版本: $CURRENT"
+          LATEST=$(curl -s "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | python3 -c "
+          import json, sys, os, re
+          data = json.load(sys.stdin)
+          vers = []
+          for t in data.get('results', []):
+              m = re.match(r'x86-64-openwrt-(\d+)\.(\d+)\.(\d+)\$', t['name'])
+              if m:
+                  vers.append(tuple(map(int, m.groups())))
+          if not vers:
+              print('NONE')
+          else:
+              vers.sort()
+              latest = vers[-1]
+              cur = tuple(map(int, os.environ['CURRENT'].split('.')))
+              print(('%d.%d.%d' % latest) if latest > cur else 'NONE')
+          ")
+          echo "官方最新版本: $LATEST"
+          if [ -n "$LATEST" ] && [ "$LATEST" != "NONE" ]; then
+            echo "发现新版本: $LATEST"
+            echo "new_version=$LATEST" >> $GITHUB_OUTPUT
+          else
+            echo "已是最新, 无需构建"
+          fi
+
+      - name: 触发自动构建
+        if: steps.check.outputs.new_version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ steps.check.outputs.new_version }}"
+          echo "触发构建版本: $V (其余配置用默认值: 2G / 插件全开 / 192.168.50.2)"
+          gh workflow run build-x86-64.yml -f immwrt_version="$V"
