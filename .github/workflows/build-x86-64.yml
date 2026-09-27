@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       immwrt_version:
-        description: "ImmortalWrt 版本 (如 25.12.1 / 25.12.2, 自动检查时自动填入)"
-        required: true
-        default: "25.12.1"
+        description: "ImmortalWrt 版本: 填 latest 自动用官方最新版; 也可指定如 25.12.2 / 25.12.1 / 25.12.0 (可选标签见 Docker Hub immortalwrt/imagebuilder 的 x86-64-openwrt-*)"
+        required: false
+        default: "latest"
         type: string
       firmware_size:
         description: "固件大小 (含 Docker 可用空间)"
@@ -63,7 +63,7 @@ on:
         default: true
         type: boolean
       enable_tgcheckin:
-        description: "集成 TG 打卡依赖 (python3/pip, 升级后自动重装 telethon)"
+        description: "集成 TG 打卡依赖 (本人专用; 他人需要请去 tg-checkin 项目页学习: github.com/yiyewudao/tg-checkin)"
         required: false
         default: true
         type: boolean
@@ -81,6 +81,27 @@ jobs:
     steps:
       - name: 拉取仓库
         uses: actions/checkout@v4
+
+      - name: 解析 ImmortalWrt 版本 (latest -> 官方最新版)
+        id: ver
+        run: |
+          V="${{ inputs.immwrt_version }}"
+          if [ -z "$V" ] || [ "$V" = "latest" ] || [ "$V" = "auto" ]; then
+            echo "自动获取官方最新版本..."
+            V=$(curl -s "https://hub.docker.com/v2/repositories/immortalwrt/imagebuilder/tags?page_size=100&name=x86-64-openwrt-" | python3 -c "
+          import json, sys, re
+          vers = []
+          for t in json.load(sys.stdin).get('results', []):
+              m = re.match(r'x86-64-openwrt-(\d+)\.(\d+)\.(\d+)\$', t['name'])
+              if m:
+                  vers.append(tuple(map(int, m.groups())))
+          vers.sort()
+          print(('%d.%d.%d' % vers[-1]) if vers else '')
+          ")
+            [ -z "$V" ] && { echo "❌ 获取最新版本失败"; exit 1; }
+          fi
+          echo "📌 使用版本: $V"
+          echo "version=$V" >> $GITHUB_OUTPUT
 
       - name: 生成首次开机配置 (后台IP/时区/主机名/Docker防火墙)
         run: |
@@ -112,14 +133,14 @@ jobs:
             -e ENABLE_QUICKFILE=${{ inputs.enable_quickfile }} \
             -e ENABLE_TGCHECKIN=${{ inputs.enable_tgcheckin }} \
             -e EXTRA_PACKAGES="${{ inputs.extra_packages }}" \
-            immortalwrt/imagebuilder:x86-64-openwrt-${{ inputs.immwrt_version }} \
+            immortalwrt/imagebuilder:x86-64-openwrt-${{ steps.ver.outputs.version }} \
             /bin/bash /home/build/immortalwrt/build.sh
 
       - name: 生成固件信息
         run: |
           cat > router-info.md << EOF
           ## 📡 固件信息
-          - 版本: ImmortalWrt ${{ inputs.immwrt_version }} (x86-64, UEFI)
+          - 版本: ImmortalWrt ${{ steps.ver.outputs.version }} (x86-64, UEFI)
           - 固件大小: ${{ inputs.firmware_size }}
           - 🏠 后台地址: http://${{ inputs.lan_ip }} (用户名 root, 首次无密码)
           - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / PassWall=${{ inputs.enable_passwall }} / PassWall2=${{ inputs.enable_passwall2 }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }} / QuickFile=${{ inputs.enable_quickfile }} / TG打卡依赖=${{ inputs.enable_tgcheckin }}
@@ -142,6 +163,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          echo "${{ inputs.immwrt_version }}" > .last-built-version
+          echo "${{ steps.ver.outputs.version }}" > .last-built-version
           git add .last-built-version
-          git diff --cached --quiet || (git commit -m "记录已构建版本: ${{ inputs.immwrt_version }}" && git push)
+          git diff --cached --quiet || (git commit -m "记录已构建版本: ${{ steps.ver.outputs.version }}" && git push)
