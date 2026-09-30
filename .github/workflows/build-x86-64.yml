@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: 拉取仓库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 解析 ImmortalWrt 版本 (latest -> 官方最新版)
         id: ver
@@ -151,7 +151,7 @@ jobs:
           cat router-info.md
 
       - name: 发布到 Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: x86-64-autobuild
           name: "x86-64 自动构建"
