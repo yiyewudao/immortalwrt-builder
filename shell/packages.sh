@@ -6,7 +6,10 @@
 PACKAGES="curl"
 PACKAGES="$PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn luci-i18n-ttyd-zh-cn luci-i18n-diskman-zh-cn"
-PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn luci-i18n-attendedsysupgrade-zh-cn"
+PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn"
+# 去掉官方"值守式系统升级"(attendedsysupgrade)：它是给官方固件用的，
+# 会去官方构建服务器打镜像；本仓库用自建的"固件在线更新"，留着只会误导
+PACKAGES="$PACKAGES -luci-app-attendedsysupgrade -luci-i18n-attendedsysupgrade-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
 PACKAGES="$PACKAGES luci-compat"  # 在线升级 LuCI 页需要（传统 luci.controller/template API）
 
