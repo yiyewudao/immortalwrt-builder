@@ -56,8 +56,12 @@ if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
   wget -q "$AGH_IPK_URL" -O /tmp/agh-dl/app.ipk.gz || { echo "❌ AdGuardHome LuCI 包下载失败"; exit 1; }
   gunzip -c /tmp/agh-dl/app.ipk.gz > /tmp/agh-dl/app.tar
   tar -xf /tmp/agh-dl/app.tar -C /tmp/agh-dl/ ./data.tar.gz
-  tar -xzf /tmp/agh-dl/data.tar.gz -C files/
-  rm -rf /tmp/agh-dl
+  # 注：files/ 属主是 runner（容器内 build 用户非属主），tar 直接解到 files/
+  # 会因 utime/chmod 已存在目录而失败；先解到临时目录再 cp -rp 进去
+  mkdir -p /tmp/agh-data
+  tar -xzf /tmp/agh-dl/data.tar.gz -C /tmp/agh-data/
+  cp -rp /tmp/agh-data/. files/
+  rm -rf /tmp/agh-dl /tmp/agh-data
   # 官方二进制 (预置到 LuCI 默认 binpath，开箱即用，无需首次运行时下载)
   wget -qO- "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz" \
     | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome/AdGuardHome \
