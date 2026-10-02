@@ -18,6 +18,9 @@ on:
           - 2G
           - 3G
           - 4G
+          - 8G
+          - 10G
+          - 16G
       lan_ip:
         description: "默认后台管理 IP"
         required: true
@@ -142,6 +145,9 @@ jobs:
             2G) ROOTFS=2048 ;;
             3G) ROOTFS=3072 ;;
             4G) ROOTFS=4096 ;;
+            8G) ROOTFS=8192 ;;
+            10G) ROOTFS=10240 ;;
+            16G) ROOTFS=16384 ;;
           esac
           echo "固件大小: ${{ inputs.firmware_size }} (${ROOTFS}MB)"
           docker run --rm \
