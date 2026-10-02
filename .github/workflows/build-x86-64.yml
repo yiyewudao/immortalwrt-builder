@@ -224,6 +224,12 @@ jobs:
             immortalwrt/imagebuilder:x86-64-openwrt-${{ steps.ver.outputs.version }} \
             /bin/bash /home/build/immortalwrt/build.sh
 
+      - name: 修正构建产物权限 (容器内 build 用户创建的子目录属主不对)
+        run: |
+          # docker 里 build 用户建的 bin/targets/... 子目录属主是他，runner 写不进去；
+          # 放开整个 bin 树，后续步骤才能写 version.txt / SHA256SUMS.txt
+          chmod -R a+rwX bin/ 2>/dev/null || sudo chmod -R a+rwX bin/
+
       - name: 生成版本与校验文件 (供在线升级)
         run: |
           cd ${{ github.workspace }}/bin/targets/x86/64
