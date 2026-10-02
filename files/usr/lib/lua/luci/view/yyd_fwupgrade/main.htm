@@ -1,0 +1,131 @@
+<%+header%>
+<h2 name="content">固件在线更新</h2>
+<div class="cbi-map">
+	<div class="cbi-section">
+		<div class="cbi-value">
+			<label class="cbi-value-title">当前版本</label>
+			<div class="cbi-value-field"><strong id="cur_ver">读取中…</strong></div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title">最新版本</label>
+			<div class="cbi-value-field">
+				<strong id="latest_ver">-</strong>
+				<span id="pub_at" class="cbi-value-description"></span>
+			</div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title">下载通道</label>
+			<div class="cbi-value-field">
+				<select id="channel" class="cbi-input-select">
+					<option value="auto">智能自动（推荐）</option>
+					<option value="ghfast">极速镜像 ghfast.top</option>
+					<option value="ghproxy">备用镜像 ghproxy.net</option>
+					<option value="native">GitHub 原生</option>
+				</select>
+				<div class="cbi-value-description">国内建议用智能自动或极速镜像</div>
+			</div>
+		</div>
+	</div>
+	<div class="cbi-page-actions">
+		<input type="button" class="btn cbi-button cbi-button-apply" id="btn_check" value="检查最新版本" />
+		<input type="button" class="btn cbi-button cbi-button-positive" id="btn_flash" value="立即一键无损升级" style="display:none" />
+	</div>
+	<div id="progress_wrap" style="display:none; margin:1em 0">
+		<div style="background:#e0e0e0; border-radius:6px; height:22px; overflow:hidden">
+			<div id="progress_bar" style="background:#4a90d9; height:22px; width:0%; transition:width .5s"></div>
+		</div>
+		<p id="progress_text" style="margin-top:.5em"></p>
+	</div>
+</div>
+<script type="text/javascript">
+(function(){
+	var base = '<%=url("admin/system/yyd_fwupgrade")%>';
+	var token = '<%=token%>';
+	var timer = null;
+
+	function post(path, data, cb) {
+		var body = 'token=' + encodeURIComponent(token);
+		if (data) for (var k in data)
+			body += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
+		fetch(base + path, {
+			method: 'POST',
+			headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+			body: body
+		}).then(function(r){ return r.json(); }).then(cb)
+		.catch(function(e){ alert('请求失败: ' + e); });
+	}
+
+	function setBar(percent, text) {
+		document.getElementById('progress_bar').style.width = (percent || 0) + '%';
+		document.getElementById('progress_text').textContent = text || '';
+	}
+
+	function startPoll() {
+		stopPoll();
+		timer = setInterval(poll, 2000);
+	}
+	function stopPoll() {
+		if (timer) { clearInterval(timer); timer = null; }
+	}
+	function poll() {
+		fetch(base + '/progress').then(function(r){ return r.json(); }).then(function(p){
+			setBar(p.percent, p.detail || p.stage || '');
+			if (p.stage === 'failed') {
+				stopPoll();
+				alert('升级失败: ' + (p.detail || '未知错误') + '\n可 SSH 查看 /tmp/fw-upgrade.log');
+			} else if (p.stage === 'rebooting' || p.stage === 'done') {
+				stopPoll();
+				setBar(100, '升级完成，系统正在重启，等待路由器恢复后自动刷新…');
+				var tries = 0;
+				var waitTimer = setInterval(function(){
+					tries++;
+					fetch(base + '/progress', {cache: 'no-store'}).then(function(r){
+						if (r.ok) { clearInterval(waitTimer); location.reload(); }
+					}).catch(function(){});
+					if (tries > 40) {
+						clearInterval(waitTimer);
+						setBar(100, '路由器尚未恢复，请稍后手动刷新页面');
+					}
+				}, 15000);
+			}
+		}).catch(function(){});
+	}
+
+	function check(silent) {
+		var btn = document.getElementById('btn_check');
+		btn.disabled = true;
+		post('/check', null, function(d){
+			btn.disabled = false;
+			if (!d.ok) { if (!silent) alert('检查失败，可 SSH 执行 fw-upgrade --check 查看原因'); return; }
+			document.getElementById('cur_ver').textContent = d.current || '-';
+			document.getElementById('latest_ver').textContent = d.latest || '-';
+			document.getElementById('pub_at').textContent = d.published_at ? ('发布时间: ' + d.published_at) : '';
+			document.getElementById('btn_flash').style.display = d.has_update ? '' : 'none';
+			if (!silent && !d.has_update) alert('已是最新版本');
+		});
+	}
+
+	document.getElementById('btn_check').onclick = function(){ check(false); };
+	document.getElementById('btn_flash').onclick = function(){
+		if (!confirm('确定升级吗？\n\n将下载新固件、校验 SHA256 并保留配置刷入，完成后自动重启（约 1~2 分钟）。')) return;
+		var ch = document.getElementById('channel').value;
+		this.style.display = 'none';
+		document.getElementById('progress_wrap').style.display = '';
+		setBar(2, '升级任务已启动…');
+		post('/flash', {channel: ch}, function(d){
+			if (d.ok) startPoll();
+			else alert('启动升级任务失败');
+		});
+	};
+
+	// 打开页面自动检查一次；若有任务在跑则继续显示进度
+	check(true);
+	fetch(base + '/progress').then(function(r){ return r.json(); }).then(function(p){
+		if (p.stage && p.stage !== 'idle' && p.stage !== 'done' && p.stage !== 'failed') {
+			document.getElementById('progress_wrap').style.display = '';
+			startPoll();
+		}
+	}).catch(function(){});
+})();
+</script>
+<%+footer%>

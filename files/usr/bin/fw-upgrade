@@ -1,0 +1,401 @@
+#!/bin/sh
+# fw-upgrade - yiyewudao/immortalwrt-builder 固件在线升级工具
+#
+#   fw-upgrade --check                  检查是否有新版本 (人类可读输出)
+#   fw-upgrade --check-json             检查是否有新版本 (JSON 输出, 供 LuCI 调用)
+#   fw-upgrade --flash [auto|ghfast|ghproxy|native] [--allow-downgrade]
+#                                       下载 + gzip 测试 + SHA256 校验 + sysupgrade 兼容性测试 + 保留配置刷入
+#                                       默认拒绝降级（目标版本不高于当前版本时中止），加 --allow-downgrade 可强制
+#
+# 版本比对依据: /etc/yyd-firmware-release (构建时写入) vs Release 中的 version.txt
+# 设计原则(稳定优先):
+#   - 版本检查不依赖 GitHub API: Release 用固定 tag, version.txt 地址是确定性的,
+#     走 ghfast/ghproxy/原生三通道直取; API 只用于获取精确的固件资产地址(可选增强)
+#   - 固件资产按"文件名包含版本号"精确匹配, 避免 Release 堆积旧固件时选错
+
+set -eu
+
+# LuCI/rpcd 触发时环境变量与 SSH 不同，显式指定 PATH（ophub/luci-app-amlogic#54 的教训）
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+REPO="yiyewudao/immortalwrt-builder"
+TAG="x86-64-autobuild"
+API_URL="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
+VERSION_FILE="/etc/yyd-firmware-release"
+WORK_DIR="/root/fw-upgrade-tmp"
+LOCK_FILE="/tmp/fw-upgrade.lock"
+PROGRESS_FILE="/tmp/fw-upgrade.progress"
+LOG_FILE="/tmp/fw-upgrade.log"
+# ImageBuilder PROFILE，改构建配置时同步修改
+PROFILE="generic"
+
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE" 2>/dev/null || true
+    printf '==> %s\n' "$*" >&2
+}
+
+set_progress() {
+    # $1=stage $2=percent $3=detail
+    printf '{"stage":"%s","percent":%s,"detail":"%s"}\n' "$1" "$2" "$3" > "${PROGRESS_FILE}.tmp" 2>/dev/null || true
+    mv -f "${PROGRESS_FILE}.tmp" "$PROGRESS_FILE" 2>/dev/null || true
+}
+
+die() {
+    set_progress "failed" 100 "$*"
+    log "ERROR: $*"
+    rm -f "$LOCK_FILE"
+    # 日志同时落盘到 /root（/tmp 是内存盘，重启后丢失，不利于排障）
+    cp -f "$LOG_FILE" /root/fw-upgrade-last.log 2>/dev/null || true
+    exit 1
+}
+
+get_local_ver() {
+    if [ -f "$VERSION_FILE" ]; then
+        tr -d ' \r\n' < "$VERSION_FILE" 2>/dev/null
+    else
+        printf 'unknown'
+    fi
+}
+
+# 直取远端 version.txt（不走 API，固定 tag 地址确定；三通道按序尝试）
+fetch_remote_ver() {
+    local url v
+    for url in \
+        "https://ghfast.top/https://github.com/${REPO}/releases/download/${TAG}/version.txt" \
+        "https://ghproxy.net/https://github.com/${REPO}/releases/download/${TAG}/version.txt" \
+        "https://github.com/${REPO}/releases/download/${TAG}/version.txt" ; do
+        v="$(curl -fsSL --retry 1 --max-time 15 "$url" 2>/dev/null | tr -d ' \r\n')"
+        if [ -n "$v" ]; then
+            printf '%s' "$v"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 经 API 列出 Release 中的固件资产，输出 "name|url|size" 行，另附 SHA_URL= / PUBLISHED_AT= 行
+# 失败返回非零（调用方回退到确定性拼接地址）
+api_assets() {
+    local rel_json
+    rel_json="$(curl -fsSL --retry 2 --max-time 25 "$API_URL" 2>/dev/null)" || return 1
+    [ -n "$rel_json" ] || return 1
+    printf '%s' "$rel_json" | ucode -e '
+        import * as fs from "fs";
+        let data = json(fs.stdin.read("all"));
+        let assets = data.assets || [];
+        let imgs = filter(assets, a => match(a.name, /squashfs-combined(-efi)?\.img\.gz$/));
+        for (let i = 0; i < length(imgs); i++) {
+            let a = imgs[i];
+            print(a.name + "|" + a.browser_download_url + "|" + a.size);
+        }
+        let sha = filter(assets, a => match(a.name, /^SHA256SUMS\.txt$/))[0];
+        print("SHA_URL=" + (sha ? sha.browser_download_url : ""));
+        print("PUBLISHED_AT=" + (data.published_at || ""));
+    ' 2>/dev/null || return 1
+}
+
+val_of() {
+    # $1=多行 KEY=VALUE 文本 $2=KEY
+    printf '%s\n' "$1" | sed -n "s/^$2=//p" | head -n1
+}
+
+ver_norm() {
+    # "25.12.2" → "00025.00012.00002"；纯 shell 实现，不依赖 sort -V（busybox 未必支持）
+    local v="$1"
+    local IFS=.
+    set -- $v
+    printf '%05d.%05d.%05d' "${1:-0}" "${2:-0}" "${3:-0}" 2>/dev/null || printf '00000.00000.00000'
+}
+
+full_ver_norm() {
+    # "25.12.2-20261002120000" → "00025.00012.00002-20261002120000"，可直接字符串比较
+    local full="$1" ver ts
+    ver="${full%%-*}"
+    ts="${full##*-}"
+    printf '%s-%s' "$(ver_norm "$ver")" "$ts"
+}
+
+ver_cmp() {
+    # 比较两个完整版本号，输出 -1（a<b）/ 0（相等）/ 1（a>b）
+    local a b
+    a="$(full_ver_norm "$1")"
+    b="$(full_ver_norm "$2")"
+    if [ "$a" \< "$b" ]; then
+        printf '%s' '-1'
+    elif [ "$a" \> "$b" ]; then
+        printf '%s' '1'
+    else
+        printf '%s' '0'
+    fi
+}
+
+img_pattern() {
+    # 按实际启动模式选择固件变体：UEFI 用 combined-efi，BIOS 用 combined
+    if [ -d /sys/firmware/efi ]; then
+        printf 'squashfs-combined-efi.img.gz'
+    else
+        printf 'squashfs-combined.img.gz'
+    fi
+}
+
+preflight() {
+    # 升级前依赖预检，缺一即中止（ophub 的做法）
+    local missing="" cmd
+    for cmd in curl sha256sum sysupgrade ucode df gzip; do
+        command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
+    done
+    [ -z "$missing" ] || die "缺少必要命令:$missing，无法继续升级"
+}
+
+# $1 = 版本号前缀(如 25.12.2) → 输出 ASSET_NAME / ASSET_URL / ASSET_SIZE / SHA_URL / PUBLISHED_AT
+# 优先经 API 按"文件名包含版本号 + 启动模式"精确匹配；API 不可用则按固定命名规则拼接
+resolve_assets() {
+    local ver="$1" all line rest pat
+    pat="$(img_pattern)"
+    all="$(api_assets 2>/dev/null)" || all=""
+    if [ -n "$all" ]; then
+        line="$(printf '%s\n' "$all" | grep -F "$pat" | grep -F "$ver" | tail -n 1)"
+        [ -n "$line" ] || line="$(printf '%s\n' "$all" | grep -F "$pat" | tail -n 1)"
+        if [ -n "$line" ]; then
+            printf 'ASSET_NAME=%s\n' "${line%%|*}"
+            rest="${line#*|}"
+            printf 'ASSET_URL=%s\n' "${rest%%|*}"
+            printf 'ASSET_SIZE=%s\n' "${rest##*|}"
+            printf 'SHA_URL=%s\n' "$(val_of "$all" SHA_URL)"
+            printf 'PUBLISHED_AT=%s\n' "$(val_of "$all" PUBLISHED_AT)"
+            return 0
+        fi
+    fi
+    local name="immortalwrt-${ver}-x86-64-${PROFILE}-${pat}"
+    printf 'ASSET_NAME=%s\n' "$name"
+    printf 'ASSET_URL=%s\n' "https://github.com/${REPO}/releases/download/${TAG}/${name}"
+    printf 'ASSET_SIZE=0\n'
+    printf 'SHA_URL=%s\n' "https://github.com/${REPO}/releases/download/${TAG}/SHA256SUMS.txt"
+    printf 'PUBLISHED_AT=\n'
+    return 0
+}
+
+do_check() {
+    # $1 = text|json
+    local local_ver latest_ver has_update published_at
+    local_ver="$(get_local_ver)"
+    latest_ver="$(fetch_remote_ver)" || die "无法获取远端版本，请检查网络（必要时配置 https_proxy 代理）"
+    if [ "$latest_ver" = "$local_ver" ]; then has_update="false"; else has_update="true"; fi
+    if [ "$1" = "json" ]; then
+        published_at="$(api_assets 2>/dev/null | sed -n 's/^PUBLISHED_AT=//p' | head -n1)"
+        printf '{"ok":true,"current":"%s","latest":"%s","has_update":%s,"published_at":"%s"}\n' \
+            "$local_ver" "$latest_ver" "$has_update" "$published_at"
+    else
+        printf '当前版本: %s\n最新版本: %s\n' "$local_ver" "$latest_ver"
+        if [ "$has_update" = "true" ]; then
+            printf '发现新版本，执行 fw-upgrade --flash 升级\n'
+        else
+            printf '已是最新版本\n'
+        fi
+    fi
+}
+
+download_file() {
+    # $1=url $2=输出路径 $3=描述
+    local url="$1" out="$2" desc="$3"
+    local prefixes p target ok=0
+    case "$CHANNEL" in
+        native)  prefixes="native" ;;
+        ghfast)  prefixes="https://ghfast.top/" ;;
+        ghproxy) prefixes="https://ghproxy.net/" ;;
+        *)       prefixes="https://ghfast.top/ https://ghproxy.net/ native" ;;
+    esac
+    for p in $prefixes; do
+        if [ "$p" = "native" ]; then
+            target="$url"
+        else
+            target="${p}${url}"
+        fi
+        log "下载${desc}: ${target}"
+        if curl -fL --connect-timeout 15 --retry 2 -o "$out" "$target" 2>/dev/null; then
+            ok=1
+            break
+        fi
+        log "${desc} 下载失败，尝试下一个通道…"
+        rm -f "$out"
+    done
+    [ "$ok" = "1" ] || die "${desc} 下载失败，所有通道均不可用"
+}
+
+check_disk() {
+    # $1 = 需要的字节数(0 表示未知，按 400MB 估)
+    local need_bytes="$1" avail_kb need_kb
+    [ "$need_bytes" -gt 0 ] 2>/dev/null || need_bytes=$((400*1024*1024))
+    need_kb=$(( need_bytes / 1024 + 102400 ))
+    avail_kb="$(df -k "$WORK_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -gt 0 ] 2>/dev/null \
+        && [ "$avail_kb" -lt "$need_kb" ] 2>/dev/null; then
+        die "磁盘空间不足：可用 $((avail_kb/1024))MB，需要约 $((need_kb/1024))MB"
+    fi
+}
+
+do_flash() {
+    CHANNEL="${1:-auto}"
+    ALLOW_DOWNGRADE="${2:-}"
+    case "$CHANNEL" in
+        auto|ghfast|ghproxy|native) ;;
+        *) CHANNEL="auto" ;;
+    esac
+
+    preflight
+
+    if [ -f "$LOCK_FILE" ]; then
+        local pid lock_ts now
+        pid="$(cut -d' ' -f1 "$LOCK_FILE" 2>/dev/null)"
+        lock_ts="$(cut -d' ' -f2 "$LOCK_FILE" 2>/dev/null)"
+        now="$(date +%s 2>/dev/null)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            # 锁超过 2 小时视为过期（防崩溃残留 + PID 复用误判）
+            if [ -n "$lock_ts" ] && [ -n "$now" ] \
+                && [ "$now" -gt "$((lock_ts + 7200))" ] 2>/dev/null; then
+                log "锁文件已过期（>2小时），强制接管"
+            else
+                die "升级任务已在运行中 (PID $pid)，请勿重复执行"
+            fi
+        fi
+    fi
+    echo "$$ $(date +%s 2>/dev/null)" > "$LOCK_FILE"
+    trap 'rm -f "$LOCK_FILE"' EXIT INT TERM
+    : > "$LOG_FILE"
+    rm -rf "$WORK_DIR"
+    mkdir -p "$WORK_DIR"
+
+    set_progress "init" 5 "正在查询最新版本…"
+    local local_ver latest_ver ver r
+    local asset_name asset_url asset_size sha_url
+    local_ver="$(get_local_ver)"
+    latest_ver="$(fetch_remote_ver)" || die "无法获取远端版本，请检查网络（必要时配置 https_proxy 代理）"
+    log "当前版本: $local_ver"
+    log "最新版本: $latest_ver"
+    if [ "$latest_ver" = "$local_ver" ]; then
+        log "已是最新版本，无需升级"
+        set_progress "done" 100 "已是最新版本，无需升级"
+        exit 0
+    fi
+    # 降级防护：目标版本必须高于当前版本（参考官方 owut 默认拒绝降级的逻辑）
+    if [ "$local_ver" != "unknown" ] && [ "$ALLOW_DOWNGRADE" != "1" ]; then
+        if [ "$(ver_cmp "$latest_ver" "$local_ver")" != "1" ]; then
+            die "目标版本 ($latest_ver) 不高于当前版本 ($local_ver)，已拒绝。如确需降级请执行: fw-upgrade --flash --allow-downgrade"
+        fi
+    fi
+    # version.txt 格式: <ImmortalWrt版本>-<构建时间戳>，如 25.12.2-20261002120000
+    ver="${latest_ver%%-*}"
+    [ -n "$ver" ] || die "远端版本号格式异常: $latest_ver"
+
+    set_progress "init" 10 "正在解析下载地址…"
+    r="$(resolve_assets "$ver")"
+    asset_name="$(val_of "$r" ASSET_NAME)"
+    asset_url="$(val_of "$r" ASSET_URL)"
+    asset_size="$(val_of "$r" ASSET_SIZE)"
+    sha_url="$(val_of "$r" SHA_URL)"
+    [ -n "$asset_name" ] && [ -n "$asset_url" ] && [ -n "$sha_url" ] \
+        || die "无法解析下载地址"
+    log "目标固件: $asset_name"
+
+    check_disk "$asset_size"
+
+    # 配置备份大小预检：x86 的 sysupgrade 把备份存到 /boot（约 16MB），
+    # squashfs 下 platform.sh 只能回退到 /boot，备份太大有截断风险 → 直接中止并明示
+    set_progress "init" 12 "正在预估配置备份大小…"
+    if sysupgrade --create-backup "$WORK_DIR/backup-test.tgz" >/dev/null 2>&1; then
+        _bsz="$(stat -c%s "$WORK_DIR/backup-test.tgz" 2>/dev/null || echo 0)"
+        rm -f "$WORK_DIR/backup-test.tgz"
+        log "配置备份大小约 $((_bsz / 1024))KB"
+        if [ "$_bsz" -gt 10485760 ] 2>/dev/null; then
+            die "配置备份约 $((_bsz / 1024 / 1024))MB，超过 /boot 安全空间 (10MB)，继续升级可能导致配置丢失。请精简 /etc 下的大文件（如代理数据库、GeoIP 数据）后重试，或考虑改用 ext4 固件"
+        fi
+    else
+        log "跳过备份大小预检（sysupgrade 不支持 --create-backup）"
+    fi
+
+    set_progress "downloading" 15 "正在下载固件镜像…"
+    download_file "$asset_url" "$WORK_DIR/$asset_name" "固件镜像"
+    set_progress "downloading" 60 "正在下载 SHA256 校验文件…"
+    download_file "$sha_url" "$WORK_DIR/SHA256SUMS.txt" "校验文件"
+    set_progress "downloaded" 65 "下载完成"
+
+    set_progress "verifying" 68 "正在做 gzip 完整性测试…"
+    log "正在做 gzip 完整性测试…"
+    gzip -t "$WORK_DIR/$asset_name" || die "固件镜像 gzip 完整性测试失败，文件可能损坏，已中止"
+
+    set_progress "verifying" 70 "正在校验 SHA256…"
+    log "正在校验 SHA256…"
+    ( cd "$WORK_DIR" && grep -F "$asset_name" SHA256SUMS.txt | sha256sum -c ) \
+        || die "SHA256 校验失败，文件可能损坏，已中止"
+    log "SHA256 校验通过"
+
+    set_progress "testing" 80 "sysupgrade 兼容性测试…"
+    log "执行 sysupgrade -T 兼容性测试…"
+    sysupgrade -T "$WORK_DIR/$asset_name" || die "sysupgrade 兼容性测试失败，已中止"
+    log "兼容性测试通过"
+
+    # 停掉可能高频写盘的代理服务，避免 sysupgrade 打包配置时
+    # 因文件变动报 "file changed as we read it" 而中止
+    set_progress "backup" 85 "正在暂停代理服务…"
+    log "正在暂停代理服务…"
+    /etc/init.d/nikki stop 2>/dev/null || true
+    /etc/init.d/openclash stop 2>/dev/null || true
+    /etc/init.d/passwall stop 2>/dev/null || true
+    /etc/init.d/passwall2 stop 2>/dev/null || true
+    sync
+    # 若系统有 GNU tar，忽略文件微秒级变动警告
+    export TAR_OPTIONS="--warning=no-file-changed"
+
+    # "后悔药"：备份分区表与引导扇区到磁盘（/root），万一升级后无法引导可手动恢复
+    set_progress "backup" 87 "正在备份分区表与引导扇区…"
+    local _rootdev _disk
+    _rootdev="$(df / 2>/dev/null | awk 'NR==2 {print $1}')"
+    # /dev/sda2 → /dev/sda；/dev/nvme0n1p2 → /dev/nvme0n1；/dev/mmcblk0p2 → /dev/mmcblk0
+    case "$_rootdev" in
+        *p[0-9]*)
+            _disk="${_rootdev%[0-9]*}"
+            _disk="${_disk%p}"
+            ;;
+        *)
+            _disk="${_rootdev%[0-9]*}"
+            ;;
+    esac
+    if [ -n "$_disk" ] && [ -b "$_disk" ]; then
+        sfdisk -d "$_disk" > /root/partition-table.bak 2>/dev/null || true
+        dd if="$_disk" of=/root/bootsector.bak bs=512 count=2048 conv=fsync 2>/dev/null || true
+        log "分区表与引导扇区已备份到 /root/partition-table.bak / /root/bootsector.bak"
+    else
+        log "无法识别启动磁盘 ($_rootdev)，跳过 bootloader 备份"
+    fi
+
+    # 刷入：sysupgrade 默认保留配置（不加 -n）
+    set_progress "flashing" 92 "正在刷入（保留配置）…"
+    log "即将刷入并重启，约 1~2 分钟，请耐心等待"
+    set_progress "rebooting" 100 "刷入完成，正在重启…"
+    rm -f "$LOCK_FILE"
+    trap - EXIT INT TERM
+    sysupgrade -v "$WORK_DIR/$asset_name"
+}
+
+usage() {
+    printf '用法: %s [--check|--check-json|--flash [auto|ghfast|ghproxy|native] [--allow-downgrade]]\n' "$0" >&2
+}
+
+case "${1:-}" in
+    --check)      do_check text ;;
+    --check-json) do_check json ;;
+    --flash)
+        shift
+        _channel="auto"; _downgrade=""
+        for _a in "$@"; do
+            case "$_a" in
+                --allow-downgrade) _downgrade="1" ;;
+                auto|ghfast|ghproxy|native) _channel="$_a" ;;
+                *) usage; exit 1 ;;
+            esac
+        done
+        do_flash "$_channel" "$_downgrade"
+        ;;
+    -h|--help|"") usage; exit 0 ;;
+    *)            usage; exit 1 ;;
+esac

@@ -9,7 +9,7 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 jobs:
   check:
@@ -56,3 +56,11 @@ jobs:
           V="${{ steps.check.outputs.new_version }}"
           echo "触发构建版本: $V (其余配置用默认值: 2G / 插件全开 / 192.168.50.2)"
           gh workflow run build-x86-64.yml -f immwrt_version="$V"
+
+      - name: 心跳保活 (防止 GitHub 60 天无活动停掉定时任务)
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .last-check
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last-check
+          git diff --cached --quiet || (git commit -m "chore: 定时检查心跳保活" && git push)
