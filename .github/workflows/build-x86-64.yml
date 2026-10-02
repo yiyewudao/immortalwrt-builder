@@ -21,7 +21,7 @@ on:
       lan_ip:
         description: "默认后台管理 IP"
         required: true
-        default: "192.168.50.2"
+        default: "192.168.50.4"
       enable_nikki:
         description: "集成 Nikki (Mihomo 透明代理)"
         required: false

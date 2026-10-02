@@ -7,7 +7,7 @@ mkdir -p files/etc/uci-defaults
 cat > "$OUT" << EOF
 #!/bin/sh
 # ---- 首次开机: 后台IP / 主机名 / 时区 ----
-uci set network.lan.ipaddr='${LAN_IP:-192.168.50.2}'
+uci set network.lan.ipaddr='${LAN_IP:-192.168.50.4}'
 uci set system.@system[0].hostname='ImmortalWrt'
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
