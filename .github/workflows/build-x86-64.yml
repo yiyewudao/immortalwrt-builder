@@ -25,6 +25,14 @@ on:
         description: "默认后台管理 IP"
         required: true
         default: "192.168.50.4"
+      router_mode:
+        description: "路由模式 (决定 AdGuardHome 53 端口自动配置方式)"
+        required: true
+        default: "bypass"
+        type: choice
+        options:
+          - bypass
+          - main
       enable_nikki:
         description: "集成 Nikki (Mihomo 透明代理)"
         required: false
@@ -119,6 +127,7 @@ jobs:
       - name: 生成首次开机配置 (后台IP/时区/主机名/Docker防火墙)
         run: |
           LAN_IP="${{ inputs.lan_ip }}" ENABLE_DOCKER="${{ inputs.enable_docker }}" \
+          ROUTER_MODE="${{ inputs.router_mode }}" ENABLE_ADGUARDHOME="${{ inputs.enable_adguardhome }}" \
             sh shell/gen-uci-defaults.sh
 
       - name: 预下载 AdGuardHome 二进制 (runner 上直接下载，避开容器内权限问题)
@@ -133,6 +142,25 @@ jobs:
           fi
           [ -s files/usr/bin/AdGuardHome/AdGuardHome ] || { echo "❌ AdGuardHome 二进制为空"; exit 1; }
           echo "✅ AdGuardHome 二进制就绪: $(du -h files/usr/bin/AdGuardHome/AdGuardHome | cut -f1)"
+
+      - name: 预置 AdGuardHome 配置 (DoH 上游，跳过网页向导)
+        if: inputs.enable_adguardhome == 'true'
+        run: |
+          mkdir -p files/etc
+          cat > files/etc/AdGuardHome.yaml << 'AGHEOF'
+          dns:
+            port: 53
+            upstream_dns:
+              - https://223.5.5.5/dns-query
+              - https://223.6.6.6/dns-query
+              - https://120.53.53.53/dns-query
+            bootstrap_dns:
+              - 119.29.29.29
+              - 223.5.5.5
+          http:
+            address: 0.0.0.0:3000
+          AGHEOF
+          echo "✅ AdGuardHome.yaml 已预置 (DoH 上游)"
 
       # =========================================================================
 

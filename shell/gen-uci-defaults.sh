@@ -1,6 +1,6 @@
 #!/bin/sh
 # 生成 files/etc/uci-defaults/99-custom (固件首次开机时执行一次)
-# 环境变量: LAN_IP, ENABLE_DOCKER
+# 环境变量: LAN_IP, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME
 OUT="files/etc/uci-defaults/99-custom"
 mkdir -p files/etc/uci-defaults
 
@@ -41,6 +41,35 @@ uci commit firewall
 EOF
 fi
 
+# ---- AdGuardHome 53 端口自动配置 (按路由模式) ----
+# rufengsuixing 的 init 脚本 (do_redirect) 会在服务启动时自动处理
+# dnsmasq 端口冲突和 iptables 重定向规则，这里只需设好 UCI 模式
+if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
+if [ "${ROUTER_MODE:-bypass}" = "bypass" ]; then
+# 旁路由: AdGuardHome 重定向53端口模式，劫持全网 DNS (含写死 8.8.8.8 的设备)
+cat >> "$OUT" << 'EOF'
+
+# ---- AdGuardHome (旁路由模式): 重定向53端口 ----
+uci set AdGuardHome.@AdGuardHome[0].enabled='1'
+uci set AdGuardHome.@AdGuardHome[0].redirect='redirect'
+uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
+uci commit AdGuardHome
+# dnsmasq 的 DNS 端口由 AdGuardHome init 脚本自动让位，无需手动处理
+EOF
+else
+# 主路由: AdGuardHome 直接占用53替换 dnsmasq，dnsmasq 仅保留 DHCP
+cat >> "$OUT" << 'EOF'
+
+# ---- AdGuardHome (主路由模式): 53端口替换 dnsmasq ----
+uci set AdGuardHome.@AdGuardHome[0].enabled='1'
+uci set AdGuardHome.@AdGuardHome[0].redirect='exchange'
+uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
+uci commit AdGuardHome
+# dnsmasq 保留 DHCP 功能，DNS 由 AdGuardHome 接管 (init 脚本自动处理端口)
+EOF
+fi
+fi
+
 echo 'exit 0' >> "$OUT"
 chmod +x "$OUT"
-echo "已生成 $OUT (Docker 防火墙规则: $ENABLE_DOCKER)"
+echo "已生成 $OUT (Docker: $ENABLE_DOCKER, 路由模式: ${ROUTER_MODE:-bypass}, AdGuardHome: $ENABLE_ADGUARDHOME)"
