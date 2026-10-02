@@ -11,7 +11,7 @@ on:
       firmware_size:
         description: "固件大小 (含 Docker 可用空间)"
         required: true
-        default: "2G"
+        default: "4G"
         type: choice
         options:
           - 1G
