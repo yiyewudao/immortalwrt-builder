@@ -215,7 +215,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/bin/targets/x86/64
           cp ${{ github.workspace }}/files/etc/yyd-firmware-release version.txt
-          sha256sum *squashfs-combined*.img.gz > SHA256SUMS.txt
+          sha256sum *ext4-combined*.img.gz > SHA256SUMS.txt
           echo "---- version.txt / SHA256SUMS.txt ----"
           cat version.txt SHA256SUMS.txt
 
@@ -237,7 +237,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for a in $(gh release view x86-64-autobuild --json assets -q '.assets[].name' 2>/dev/null | grep -F 'squashfs-combined' || true); do
+          for a in $(gh release view x86-64-autobuild --json assets -q '.assets[].name' 2>/dev/null | grep -E '(squashfs|ext4)-combined' || true); do
             echo "删除旧固件: $a"
             gh release delete-asset x86-64-autobuild "$a" -y || true
           done
@@ -250,7 +250,7 @@ jobs:
           name: "x86-64 自动构建"
           body_path: router-info.md
           files: |
-            ${{ github.workspace }}/bin/targets/x86/64/*squashfs-combined*.img.gz
+            ${{ github.workspace }}/bin/targets/x86/64/*ext4-combined*.img.gz
             ${{ github.workspace }}/bin/targets/x86/64/SHA256SUMS.txt
             ${{ github.workspace }}/bin/targets/x86/64/version.txt
             ${{ github.workspace }}/pkgrun/*-fw4-ipk-x86_64-*.run

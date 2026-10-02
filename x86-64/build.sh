@@ -50,4 +50,4 @@ echo "🔨 开始构建固件..."
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE=$ROOTFS_SIZE
 
 echo "✅ 构建完成:"
-ls -lh bin/targets/x86/64/*squashfs-combined-efi.img.gz
+ls -lh bin/targets/x86/64/*ext4-combined-efi.img.gz

@@ -83,7 +83,7 @@ api_assets() {
         import * as fs from "fs";
         let data = json(fs.stdin.read("all"));
         let assets = data.assets || [];
-        let imgs = filter(assets, a => match(a.name, /squashfs-combined(-efi)?\.img\.gz$/));
+        let imgs = filter(assets, a => match(a.name, /ext4-combined(-efi)?\.img\.gz$/));
         for (let i = 0; i < length(imgs); i++) {
             let a = imgs[i];
             print(a.name + "|" + a.browser_download_url + "|" + a.size);
@@ -131,10 +131,11 @@ ver_cmp() {
 
 img_pattern() {
     # 按实际启动模式选择固件变体：UEFI 用 combined-efi，BIOS 用 combined
+    # ext4 可写 rootfs：ROOTFS_PARTSIZE 生效、Docker 空间足、platform.sh 分区2备份可用
     if [ -d /sys/firmware/efi ]; then
-        printf 'squashfs-combined-efi.img.gz'
+        printf 'ext4-combined-efi.img.gz'
     else
-        printf 'squashfs-combined.img.gz'
+        printf 'ext4-combined.img.gz'
     fi
 }
 
