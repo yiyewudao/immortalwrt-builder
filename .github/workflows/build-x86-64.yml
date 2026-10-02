@@ -62,6 +62,11 @@ on:
         required: false
         default: true
         type: boolean
+      enable_adguardhome:
+        description: "集成 AdGuard Home (去广告 DNS，刷机后在 LuCI 服务里手动开启)"
+        required: false
+        default: true
+        type: boolean
       enable_tgcheckin:
         description: "集成 TG 打卡依赖 (本人专用; 他人需要请去 tg-checkin 项目页学习: github.com/yiyewudao/tg-checkin)"
         required: false
@@ -206,6 +211,7 @@ jobs:
             -e ENABLE_PASSWALL=${{ inputs.enable_passwall }} \
             -e ENABLE_PASSWALL2=${{ inputs.enable_passwall2 }} \
             -e ENABLE_QUICKFILE=${{ inputs.enable_quickfile }} \
+            -e ENABLE_ADGUARDHOME=${{ inputs.enable_adguardhome }} \
             -e ENABLE_TGCHECKIN=${{ inputs.enable_tgcheckin }} \
             -e EXTRA_PACKAGES="${{ inputs.extra_packages }}" \
             immortalwrt/imagebuilder:x86-64-openwrt-${{ steps.ver.outputs.version }} \
@@ -226,7 +232,7 @@ jobs:
           - 版本: ImmortalWrt ${{ steps.ver.outputs.version }} (x86-64, UEFI)
           - 固件大小: ${{ inputs.firmware_size }}
           - 🏠 后台地址: http://${{ inputs.lan_ip }} (用户名 root, 首次无密码)
-          - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / PassWall=${{ inputs.enable_passwall }} / PassWall2=${{ inputs.enable_passwall2 }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }} / QuickFile=${{ inputs.enable_quickfile }} / TG打卡依赖=${{ inputs.enable_tgcheckin }}
+          - 插件: Nikki=${{ inputs.enable_nikki }} / OpenClash=${{ inputs.enable_openclash }} / PassWall=${{ inputs.enable_passwall }} / PassWall2=${{ inputs.enable_passwall2 }} / Lucky=${{ inputs.enable_lucky }} / 商店=${{ inputs.enable_store }} / Docker=${{ inputs.enable_docker }} / QuickFile=${{ inputs.enable_quickfile }} / TG打卡依赖=${{ inputs.enable_tgcheckin }} / AdGuardHome=${{ inputs.enable_adguardhome }}
 
           ## ⬆️ 一键升级
           旧固件升级: LuCI → 系统 → 备份/升级 → 上传本固件 → 勾选"保留配置" → 升级, 配置不丢失。
