@@ -72,11 +72,6 @@ on:
         required: false
         default: true
         type: boolean
-      enable_runpkgs:
-        description: "预置插件 .run 离线安装包到固件 /root/run (PassWall/PassWall2/OpenClash/Nikki, 刷机后可单独升级/重装, 无需重刷固件)"
-        required: false
-        default: true
-        type: boolean
       extra_packages:
         description: "额外软件包 (空格分隔, 如: luci-i18n-samba4-zh-cn)"
         required: false
@@ -123,61 +118,6 @@ jobs:
           LAN_IP="${{ inputs.lan_ip }}" ENABLE_DOCKER="${{ inputs.enable_docker }}" \
             sh shell/gen-uci-defaults.sh
 
-      # ================= 插件 .run 离线安装包 (sirpdboy/buildrun) =================
-      # 与固件同期构建, 只取 fw4(nftables) + x86_64 + ipk 组合, 植入固件 /root/run
-      - name: 生成 PassWall .run 离线包
-        if: inputs.enable_runpkgs
-        continue-on-error: true
-        uses: sirpdboy/buildrun@passwall
-        with:
-          OUTPUT_DIR: "./pkgrun"
-
-      - name: 生成 PassWall2 .run 离线包
-        if: inputs.enable_runpkgs
-        continue-on-error: true
-        uses: sirpdboy/buildrun@passwall2
-        with:
-          OUTPUT_DIR: "./pkgrun"
-
-      - name: 生成 OpenClash .run 离线包
-        if: inputs.enable_runpkgs
-        continue-on-error: true
-        uses: sirpdboy/buildrun@openclash
-        with:
-          OUTPUT_DIR: "./pkgrun"
-
-      - name: 生成 Nikki .run 离线包
-        if: inputs.enable_runpkgs
-        continue-on-error: true
-        uses: sirpdboy/buildrun@nikki
-        with:
-          OUTPUT_DIR: "./pkgrun"
-
-      - name: 筛选 .run 包并植入固件 files 目录
-        if: inputs.enable_runpkgs
-        run: |
-          mkdir -p pkgrun files/root/run
-          # 只保留与本固件匹配的包: fw4 (ImmortalWrt 22.03+ 均为 nftables) / x86_64 / ipk
-          find pkgrun -maxdepth 1 -name '*-fw4-ipk-x86_64-*.run' -exec cp -v {} files/root/run/ \;
-          if [ -z "$(ls files/root/run/*.run 2>/dev/null)" ]; then
-            echo "⚠️ 未找到匹配的 .run 包, 跳过植入 (固件照常构建)"
-            rmdir files/root/run 2>/dev/null || true
-          else
-            cat > files/root/run/说明.txt << 'EOF'
-          插件 .run 离线安装包 (与本次固件同期构建, fw4 + x86_64)
-
-          用法 (在路由器 SSH 里执行):
-            sh /root/run/xxx.run --check    # 先校验完整性（只验不装）
-            chmod +x /root/run/xxx.run && /root/run/xxx.run
-
-          说明:
-            - 用于单独升级 / 重装某个代理插件, 无需重刷整个固件
-            - 包内为第三方编译的 ipk (来源见 sirpdboy/buildrun), 与固件内预装插件版本可能不同, 以包内版本为准
-            - kmod 类内核模块不随 .run 热更新（内核强绑定），只热更新纯用户态插件
-          EOF
-            echo "---- 已植入固件 /root/run ----"
-            ls -lh files/root/run/
-          fi
       # =========================================================================
 
       - name: 写入固件版本标记 (供在线升级比对)
@@ -272,7 +212,6 @@ jobs:
             ${{ github.workspace }}/bin/targets/x86/64/*ext4-combined*.img.gz
             ${{ github.workspace }}/bin/targets/x86/64/SHA256SUMS.txt
             ${{ github.workspace }}/bin/targets/x86/64/version.txt
-            ${{ github.workspace }}/pkgrun/*-fw4-ipk-x86_64-*.run
 
       - name: 记录已构建版本 (供自动检查用)
         run: |
