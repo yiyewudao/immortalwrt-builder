@@ -57,10 +57,11 @@ if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
   gunzip -c /tmp/agh-dl/app.ipk.gz > /tmp/agh-dl/app.tar
   tar -xf /tmp/agh-dl/app.tar -C /tmp/agh-dl/ ./data.tar.gz
   # 注：files/ 属主是 runner（容器内 build 用户非属主），tar 直接解到 files/
-  # 会因 utime/chmod 已存在目录而失败；先解到临时目录再 cp -rp 进去
+  # 会因 utime/chmod 已存在目录而失败；先解到临时目录再 cp 进去
+  # （用 --preserve=mode 只保留权限位：cp -p 会尝试保留时间戳，同样会失败）
   mkdir -p /tmp/agh-data
   tar -xzf /tmp/agh-dl/data.tar.gz -C /tmp/agh-data/
-  cp -rp /tmp/agh-data/. files/
+  cp -r --preserve=mode /tmp/agh-data/. files/
   rm -rf /tmp/agh-dl /tmp/agh-data
   # 官方二进制 (预置到 LuCI 默认 binpath，开箱即用，无需首次运行时下载)
   wget -qO- "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz" \
