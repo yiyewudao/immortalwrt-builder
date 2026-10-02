@@ -188,6 +188,13 @@ jobs:
           # 兜底：确保升级脚本有执行权限（即使 git 没保留 exec bit）
           chmod +x files/usr/bin/fw-upgrade 2>/dev/null || true
 
+      - name: 放开挂载目录权限 (镜像以 build 用户运行，需可写)
+        run: |
+          mkdir -p bin
+          chmod a+rwx bin
+          # files/ 仅放开目录写权限，文件本身权限保持不动
+          find files -type d -exec chmod a+rwx {} + 2>/dev/null || true
+
       - name: 用官方 ImageBuilder 构建固件
         run: |
           case "${{ inputs.firmware_size }}" in

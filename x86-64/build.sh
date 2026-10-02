@@ -51,7 +51,7 @@ if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
   echo "🔄 准备 AdGuard Home..."
   mkdir -p /tmp/agh-dl files/usr/bin/AdGuardHome
   # LuCI 管理界面 (rufengsuixing/luci-app-adguardhome): 取最新版 ipk，解包 data.tar.gz 到 files/
-  AGH_IPK_URL="$(curl -s https://api.github.com/repos/rufengsuixing/luci-app-adguardhome/releases/latest | grep -o 'https://[^"]*\.ipk' | head -1)"
+  AGH_IPK_URL="$(wget -qO- https://api.github.com/repos/rufengsuixing/luci-app-adguardhome/releases/latest | grep -o 'https://[^"]*\.ipk' | head -1)"
   [ -z "$AGH_IPK_URL" ] && AGH_IPK_URL="https://github.com/rufengsuixing/luci-app-adguardhome/releases/download/1.8-9/luci-app-adguardhome_1.8-9_all.ipk"
   wget -q "$AGH_IPK_URL" -O /tmp/agh-dl/app.ipk.gz || { echo "❌ AdGuardHome LuCI 包下载失败"; exit 1; }
   gunzip -c /tmp/agh-dl/app.ipk.gz > /tmp/agh-dl/app.tar
