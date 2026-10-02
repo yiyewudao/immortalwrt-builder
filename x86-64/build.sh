@@ -67,11 +67,16 @@ if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
   chmod +x files/usr/share/AdGuardHome/*.sh 2>/dev/null || true
   rm -rf /tmp/agh-dl /tmp/agh-data
   # 官方二进制 (预置到 LuCI 默认 binpath，开箱即用，无需首次运行时下载)
-  wget -qO- "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz" \
-    | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome/AdGuardHome \
-    || { echo "❌ AdGuardHome 二进制下载失败"; exit 1; }
-  chmod +x files/usr/bin/AdGuardHome/AdGuardHome
+  # 注：workflow 已在 runner 上预下载（避开容器内权限问题），这里只做兜底
+  if [ ! -s files/usr/bin/AdGuardHome/AdGuardHome ]; then
+    mkdir -p files/usr/bin/AdGuardHome
+    wget -qO- "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz" \
+      | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome/AdGuardHome \
+      || { echo "❌ AdGuardHome 二进制下载失败"; exit 1; }
+    chmod +x files/usr/bin/AdGuardHome/AdGuardHome
+  fi
   [ -s files/usr/bin/AdGuardHome/AdGuardHome ] || { echo "❌ AdGuardHome 二进制为空"; exit 1; }
+  echo "✅ AdGuardHome 二进制: $(du -h files/usr/bin/AdGuardHome/AdGuardHome | cut -f1)"
   echo "✅ AdGuard Home 就绪"
 fi
 

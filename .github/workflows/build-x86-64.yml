@@ -121,6 +121,19 @@ jobs:
           LAN_IP="${{ inputs.lan_ip }}" ENABLE_DOCKER="${{ inputs.enable_docker }}" \
             sh shell/gen-uci-defaults.sh
 
+      - name: 预下载 AdGuardHome 二进制 (runner 上直接下载，避开容器内权限问题)
+        if: inputs.enable_adguardhome == 'true'
+        run: |
+          mkdir -p files/usr/bin/AdGuardHome
+          if [ ! -s files/usr/bin/AdGuardHome/AdGuardHome ]; then
+            wget -qO- "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz" \
+              | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome/AdGuardHome \
+              || { echo "❌ AdGuardHome 二进制下载失败"; exit 1; }
+            chmod +x files/usr/bin/AdGuardHome/AdGuardHome
+          fi
+          [ -s files/usr/bin/AdGuardHome/AdGuardHome ] || { echo "❌ AdGuardHome 二进制为空"; exit 1; }
+          echo "✅ AdGuardHome 二进制就绪: $(du -h files/usr/bin/AdGuardHome/AdGuardHome | cut -f1)"
+
       # =========================================================================
 
       - name: 写入固件版本标记 (供在线升级比对)
