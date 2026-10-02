@@ -1,0 +1,56 @@
+#!/bin/sh
+# fw-upgrade: 新固件首次开机，自动重装升级前用户后装的软件包
+# 清单由 fw-upgrade --flash 在升级前写入 /etc/fw-upgrade-user-pkgs.list（/etc 会被 sysupgrade 保留）
+# 后台执行，不阻塞开机；日志: /tmp/fw-pkgs-restore.log
+# （uci-defaults 仅运行一次；删除 /etc/fw-upgrade-user-pkgs.list 即跳过本功能）
+
+[ -s /etc/fw-upgrade-user-pkgs.list ] || [ -s /etc/fw-upgrade-user-pkgs.list.nobaseline ] || exit 0
+
+(
+LOG=/tmp/fw-pkgs-restore.log
+echo "$(date '+%F %T') [fw-pkgs-restore] 开始" > "$LOG" 2>/dev/null || exit 0
+
+# 老固件无基线：只给出清单，不自动重装（避免把新固件刻意移除的包又装回来）
+if [ -s /etc/fw-upgrade-user-pkgs.list.nobaseline ]; then
+    {
+        echo "本次升级前的固件无软件包基线，无法判断后装包，请手动重装："
+        cat /etc/fw-upgrade-user-pkgs.list.nobaseline
+    } >> "$LOG"
+    echo "清单保留在 /etc/fw-upgrade-user-pkgs.list.nobaseline" >> "$LOG"
+    exit 0
+fi
+
+command -v apk >/dev/null 2>&1 || { echo "无 apk，跳过" >> "$LOG"; exit 0; }
+
+# 等网络就绪（最多约 10 分钟）
+_ready=0
+for _i in $(seq 1 60); do
+    if ping -c1 -W2 223.5.5.5 >/dev/null 2>&1; then _ready=1; break; fi
+    sleep 10
+done
+[ "$_ready" = "1" ] || { echo "网络不可达，放弃自动重装，请手动处理" >> "$LOG"; exit 0; }
+
+apk update >>"$LOG" 2>&1 || { echo "apk update 失败，放弃" >> "$LOG"; exit 0; }
+
+_fail=0
+while read -r _pkg || [ -n "$_pkg" ]; do
+    [ -z "$_pkg" ] && continue
+    grep -q -F -x "P:${_pkg}" /lib/apk/db/installed 2>/dev/null && continue
+    echo "重装: ${_pkg}" >> "$LOG"
+    if apk add "$_pkg" >>"$LOG" 2>&1; then
+        echo "  -> 成功" >> "$LOG"
+    else
+        echo "  -> 失败" >> "$LOG"
+        _fail=1
+    fi
+done < /etc/fw-upgrade-user-pkgs.list
+
+if [ "$_fail" = "0" ]; then
+    rm -f /etc/fw-upgrade-user-pkgs.list
+    echo "全部重装成功，清单已清理" >> "$LOG"
+else
+    echo "部分重装失败，清单保留在 /etc/fw-upgrade-user-pkgs.list，可手动处理" >> "$LOG"
+fi
+echo "$(date '+%F %T') [fw-pkgs-restore] 结束" >> "$LOG"
+) &
+exit 0

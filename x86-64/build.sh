@@ -67,6 +67,37 @@ if [ "$ENABLE_ADGUARDHOME" = "true" ]; then
   echo "✅ AdGuard Home 就绪"
 fi
 
+# 生成镜像自带软件包清单 files/usr/share/yyd-image-pkgs.list
+# （供 fw-upgrade 区分"用户后装包"；放 /usr/share 而非 /etc，避免 sysupgrade 恢复旧配置时覆盖）
+apk_name_from_file() {
+    local base="${1##*/}"
+    base="${base%.apk}"
+    local name="" part
+    local IFS='-'
+    for part in $base; do
+        case "$part" in
+            [0-9]*) break ;;  # 版本号开始，后面都是版本
+            *) name="${name:+$name-}$part" ;;
+        esac
+    done
+    printf '%s\n' "$name"
+}
+mkdir -p files/usr/share
+{
+    for _p in $PACKAGES; do
+        case "$_p" in
+            -*) continue ;;  # 显式移除的包不计入
+            *) printf '%s\n' "$_p" ;;
+        esac
+    done
+    # 第三方 .apk（覆盖仅作为依赖装入、PACKAGES 里没写的包，如 nikki/luci-app-nikki）
+    for _f in packages/*.apk; do
+        [ -e "$_f" ] || continue
+        apk_name_from_file "$_f"
+    done
+} | sort -u > files/usr/share/yyd-image-pkgs.list
+echo "📦 镜像自带包清单: $(wc -l < files/usr/share/yyd-image-pkgs.list) 个"
+
 echo "🔨 开始构建固件..."
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE=$ROOTFS_SIZE
 

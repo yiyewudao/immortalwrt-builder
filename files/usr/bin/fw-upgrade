@@ -176,6 +176,37 @@ resolve_assets() {
     return 0
 }
 
+# 记录用户后装软件包：已装列表 − 镜像自带清单(/usr/share/yyd-image-pkgs.list)
+# 结果存 /etc/fw-upgrade-user-pkgs.list（/etc 会被 sysupgrade 保留），
+# 新固件首次开机由 /etc/uci-defaults/96-fw-pkgs-restore 自动重装
+record_user_packages() {
+    local baseline="/usr/share/yyd-image-pkgs.list"
+    local out="/etc/fw-upgrade-user-pkgs.list"
+    local installed=""
+    if [ -f /lib/apk/db/installed ]; then
+        installed="$(grep '^P:' /lib/apk/db/installed 2>/dev/null | cut -c3- | sort -u)"
+    elif command -v opkg >/dev/null 2>&1; then
+        installed="$(opkg list-installed 2>/dev/null | awk '{print $1}' | sort -u)"
+    fi
+    if [ -z "$installed" ]; then
+        log "未检测到软件包数据库，跳过后装包记录"
+        return 0
+    fi
+    rm -f "$out" "$out.nobaseline"
+    if [ -f "$baseline" ] && [ -s "$baseline" ]; then
+        printf '%s\n' "$installed" | grep -vxFf "$baseline" > "$out" 2>/dev/null || true
+        local n=0
+        [ -s "$out" ] && n="$(wc -l < "$out")"
+        log "用户后装软件包 ${n} 个，升级后将自动重装"
+        [ "$n" -gt 0 ] && log "后装包: $(tr '\n' ' ' < "$out")"
+    else
+        # 老固件无基线：保存全量列表，升级后仅提示清单、不自动重装
+        # （避免把新固件刻意移除的包又装回来）
+        printf '%s\n' "$installed" > "$out.nobaseline" 2>/dev/null || true
+        log "无镜像包基线（老固件），已保存已装列表，升级后请手动重装"
+    fi
+}
+
 do_check() {
     # $1 = text|json
     local local_ver latest_ver has_update published_at
@@ -368,6 +399,10 @@ do_flash() {
     else
         log "无法识别启动磁盘 ($_rootdev)，跳过 bootloader 备份"
     fi
+
+    # 记录用户后装软件包（升级后自动重装；清单存 /etc，随配置一起保留）
+    set_progress "backup" 90 "正在记录后装软件包…"
+    record_user_packages
 
     # 刷入：sysupgrade 默认保留配置（不加 -n）
     set_progress "flashing" 92 "正在刷入（保留配置）…"
