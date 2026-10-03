@@ -84,8 +84,8 @@ uci set AdGuardHome.@AdGuardHome[0].enabled='1'
 uci set AdGuardHome.@AdGuardHome[0].redirect='redirect'
 uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
 uci commit AdGuardHome
-# dnsmasq 让出 53 端口给 AdGuardHome (只保留 DHCP, 禁用 DNS)
-uci set dhcp.@dnsmasq[0].port='0'
+# dnsmasq DNS 让到 5335 端口 (53 给 AdGuardHome, 本地解析走 5335)
+uci set dhcp.@dnsmasq[0].port='5335'
 uci commit dhcp
 EOF
 else
@@ -97,8 +97,8 @@ uci set AdGuardHome.@AdGuardHome[0].enabled='1'
 uci set AdGuardHome.@AdGuardHome[0].redirect='exchange'
 uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
 uci commit AdGuardHome
-# dnsmasq 让出 53 端口给 AdGuardHome (只保留 DHCP, 禁用 DNS)
-uci set dhcp.@dnsmasq[0].port='0'
+# dnsmasq DNS 让到 5335 端口 (53 给 AdGuardHome, 本地解析走 5335)
+uci set dhcp.@dnsmasq[0].port='5335'
 uci commit dhcp
 EOF
 fi
