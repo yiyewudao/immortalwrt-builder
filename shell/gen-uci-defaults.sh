@@ -100,6 +100,15 @@ EOF
 fi
 fi
 
+# ---- dnsmasq: router.local 指向网关 (修 192.168.0.1 残留) ----
+# 注意: dnsmasq 自带的 "DNS 重定向" 保持关闭, DNS 劫持只由 AdGuardHome 做;
+# AdGuardHome 上游手动设为 127.0.0.1:5353 (OpenClash DNS), 链路: 客户端→AdGuardHome→OpenClash→上游
+cat >> "$OUT" << EOF
+uci delete dhcp.@dnsmasq[0].address 2>/dev/null
+uci add_list dhcp.@dnsmasq[0].address='/router.local/router.lan/${LAN_GATEWAY:-192.168.50.1}'
+uci commit dhcp
+EOF
+
 if [ "$ENABLE_TGCHECKIN" = "true" ]; then
 cat >> "$OUT" << 'EOF'
 
