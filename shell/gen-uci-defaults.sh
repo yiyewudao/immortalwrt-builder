@@ -84,7 +84,9 @@ uci set AdGuardHome.@AdGuardHome[0].enabled='1'
 uci set AdGuardHome.@AdGuardHome[0].redirect='redirect'
 uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
 uci commit AdGuardHome
-# dnsmasq 的 DNS 端口由 AdGuardHome init 脚本自动让位，无需手动处理
+# dnsmasq 让出 53 端口给 AdGuardHome (只保留 DHCP, 禁用 DNS)
+uci set dhcp.@dnsmasq[0].port='0'
+uci commit dhcp
 EOF
 else
 # 主路由: AdGuardHome 直接占用53替换 dnsmasq，dnsmasq 仅保留 DHCP
@@ -95,7 +97,9 @@ uci set AdGuardHome.@AdGuardHome[0].enabled='1'
 uci set AdGuardHome.@AdGuardHome[0].redirect='exchange'
 uci set AdGuardHome.@AdGuardHome[0].httpport='3000'
 uci commit AdGuardHome
-# dnsmasq 保留 DHCP 功能，DNS 由 AdGuardHome 接管 (init 脚本自动处理端口)
+# dnsmasq 让出 53 端口给 AdGuardHome (只保留 DHCP, 禁用 DNS)
+uci set dhcp.@dnsmasq[0].port='0'
+uci commit dhcp
 EOF
 fi
 fi
