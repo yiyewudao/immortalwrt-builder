@@ -43,6 +43,11 @@ on:
         required: false
         default: true
         type: boolean
+      openclash_preset_config:
+        description: "OpenClash: 使用配套的旁路由模式完整配置 (bypass_gateway_compatible=0 等)"
+        required: false
+        default: true
+        type: boolean
       enable_lucky:
         description: "集成 Lucky (动态域名/反代)"
         required: false
@@ -79,7 +84,7 @@ on:
         default: true
         type: boolean
       enable_tgcheckin:
-        description: "集成 TG 打卡依赖 (本人专用; 他人需要请去 tg-checkin 项目页学习: github.com/yiyewudao/tg-checkin)"
+        description: "集成 TG 打卡 (脚本预置+定时任务; 本人专用, 账号需另行配置: github.com/yiyewudao/tg-checkin)"
         required: false
         default: true
         type: boolean
@@ -127,7 +132,8 @@ jobs:
       - name: 生成首次开机配置 (后台IP/时区/主机名/Docker防火墙)
         run: |
           LAN_IP="${{ inputs.lan_ip }}" ENABLE_DOCKER="${{ inputs.enable_docker }}" \
-          ROUTER_MODE="${{ inputs.router_mode }}" ENABLE_ADGUARDHOME="${{ inputs.enable_adguardhome }}" \
+            ROUTER_MODE="${{ inputs.router_mode }}" ENABLE_ADGUARDHOME="${{ inputs.enable_adguardhome }}" \
+            ENABLE_TGCHECKIN="${{ inputs.enable_tgcheckin }}" \
             sh shell/gen-uci-defaults.sh
 
       - name: 预下载 AdGuardHome 二进制 (runner 上直接下载，避开容器内权限问题)
@@ -199,6 +205,7 @@ jobs:
             -e ROOTFS_SIZE=$ROOTFS \
             -e ENABLE_NIKKI=${{ inputs.enable_nikki }} \
             -e ENABLE_OPENCLASH=${{ inputs.enable_openclash }} \
+            -e OPENCLASH_PRESET_CONFIG=${{ inputs.openclash_preset_config }} \
             -e ENABLE_LUCKY=${{ inputs.enable_lucky }} \
             -e ENABLE_STORE=${{ inputs.enable_store }} \
             -e ENABLE_DOCKER=${{ inputs.enable_docker }} \

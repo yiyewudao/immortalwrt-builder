@@ -44,6 +44,12 @@ if [ "$ENABLE_OPENCLASH" = "true" ]; then
   wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat \
     -O files/etc/openclash/GeoSite.dat
   echo "✅ OpenClash 内核就绪"
+  # 配套的旁路由模式完整配置 (构建选项控制; 含 bypass_gateway_compatible='0' 等优化, 直接覆盖默认配置)
+  if [ "$OPENCLASH_PRESET_CONFIG" = "true" ] && [ -f "shell/openclash-bypass-config" ]; then
+    mkdir -p files/etc/config
+    cp shell/openclash-bypass-config files/etc/config/openclash
+    echo "✅ 已预置 OpenClash 旁路由模式配置"
+  fi
 fi
 
 # AdGuard Home (去广告 DNS): LuCI 管理界面 + 官方二进制预置
@@ -110,6 +116,23 @@ mkdir -p files/usr/share
     done
 } | sort -u > files/usr/share/yyd-image-pkgs.list
 echo "📦 镜像自带包清单: $(wc -l < files/usr/share/yyd-image-pkgs.list) 个"
+
+# TG 打卡脚本预置 (不含 env.sh/session 敏感文件; 修正执行权限, 防重装后 Permission denied)
+if [ "$ENABLE_TGCHECKIN" = "true" ]; then
+  echo "🔄 预置 TG 打卡脚本..."
+  mkdir -p files/root/tg-checkin
+  TG_TMP=$(mktemp -d)
+  if git clone --depth=1 -q https://github.com/yiyewudao/tg-checkin.git "$TG_TMP" 2>/dev/null; then
+    for f in checkin.py run.sh setup.py add_account.py restore.sh update.sh env.sh.example; do
+      [ -f "$TG_TMP/$f" ] && cp "$TG_TMP/$f" files/root/tg-checkin/
+    done
+    echo "✅ TG 打卡脚本已预置 (首次用 setup.py 配置账号, env.sh/session 需另行恢复)"
+  else
+    echo "⚠️ TG 打卡仓库拉取失败, 跳过脚本预置 (依赖 python3 已打入)"
+  fi
+  rm -rf "$TG_TMP"
+  chmod +x files/root/tg-checkin/*.sh 2>/dev/null || true
+fi
 
 echo "🔨 开始构建固件..."
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="files" ROOTFS_PARTSIZE=$ROOTFS_SIZE

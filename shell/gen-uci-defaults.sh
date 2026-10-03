@@ -1,6 +1,6 @@
 #!/bin/sh
 # 生成 files/etc/uci-defaults/99-custom (固件首次开机时执行一次)
-# 环境变量: LAN_IP, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME
+# 环境变量: LAN_IP, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME, ENABLE_TGCHECKIN
 OUT="files/etc/uci-defaults/99-custom"
 mkdir -p files/etc/uci-defaults
 
@@ -68,6 +68,16 @@ uci commit AdGuardHome
 # dnsmasq 保留 DHCP 功能，DNS 由 AdGuardHome 接管 (init 脚本自动处理端口)
 EOF
 fi
+fi
+
+if [ "$ENABLE_TGCHECKIN" = "true" ]; then
+cat >> "$OUT" << 'EOF'
+
+# ---- TG 打卡定时任务 (每天 8:30 北京时间; 脚本已预置在 /root/tg-checkin/, 权限正确) ----
+grep -q 'tg-checkin/run.sh' /etc/crontabs/root 2>/dev/null || \
+  echo '30 8 * * * /root/tg-checkin/run.sh' >> /etc/crontabs/root
+/etc/init.d/cron restart > /dev/null 2>&1 || true
+EOF
 fi
 
 echo 'exit 0' >> "$OUT"
