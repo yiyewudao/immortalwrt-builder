@@ -18,6 +18,16 @@ uci commit system
 uci commit network
 EOF
 
+# ---- 旁路由模式: 关闭 LAN 口 DHCPv4 服务 (由主路由分配, 防冲突) ----
+if [ "${ROUTER_MODE:-bypass}" = "bypass" ]; then
+cat >> "$OUT" << 'EOF'
+
+# ---- 旁路由模式: DHCPv4 服务已关闭 (主路由负责分配) ----
+uci set dhcp.lan.ignore='1'
+uci commit dhcp
+EOF
+fi
+
 if [ "$ENABLE_DOCKER" = "true" ]; then
 cat >> "$OUT" << 'EOF'
 
