@@ -18,6 +18,10 @@ uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci commit system
 uci commit network
+
+# ---- ttyd 监听所有地址 (防 br-lan 多 IP 时绑错导致终端空白) ----
+uci delete ttyd.@ttyd[0].interface 2>/dev/null
+uci commit ttyd 2>/dev/null || true
 EOF
 
 # ---- 旁路由模式: 关闭 LAN 口 DHCPv4 服务 (由主路由分配, 防冲突) ----
