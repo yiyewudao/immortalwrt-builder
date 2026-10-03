@@ -39,8 +39,8 @@ if [ "$ENABLE_PASSWALL2" = "true" ]; then
   PACKAGES="$PACKAGES geoview xray-core sing-box hysteria kmod-nft-socket kmod-nft-tproxy luci-app-passwall2 luci-i18n-passwall2-zh-cn"
 fi
 
-if [ "$ENABLE_QUICKFILE" = "true" ]; then
-  PACKAGES="$PACKAGES bash quickfile luci-app-quickfile luci-i18n-quickfile-zh-cn"
+if [ "$ENABLE_FILEBROWSER" = "true" ]; then
+  PACKAGES="$PACKAGES filebrowser luci-app-filebrowser luci-i18n-filebrowser-zh-cn"
 fi
 
 if [ "$ENABLE_STORE" = "true" ]; then
