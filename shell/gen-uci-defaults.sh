@@ -1,13 +1,16 @@
 #!/bin/sh
 # 生成 files/etc/uci-defaults/99-custom (固件首次开机时执行一次)
-# 环境变量: LAN_IP, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME, ENABLE_TGCHECKIN
+# 环境变量: LAN_IP, LAN_GATEWAY, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME, ENABLE_TGCHECKIN
 OUT="files/etc/uci-defaults/99-custom"
 mkdir -p files/etc/uci-defaults
 
 cat > "$OUT" << EOF
 #!/bin/sh
-# ---- 首次开机: 后台IP / 主机名 / 时区 ----
+# ---- 首次开机: 后台IP / 网关 / 主机名 / 时区 ----
+uci set network.lan.proto='static'
 uci set network.lan.ipaddr='${LAN_IP:-192.168.50.4}'
+uci set network.lan.netmask='255.255.255.0'
+uci set network.lan.gateway='${LAN_GATEWAY:-192.168.50.1}'
 uci set system.@system[0].hostname='ImmortalWrt'
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'

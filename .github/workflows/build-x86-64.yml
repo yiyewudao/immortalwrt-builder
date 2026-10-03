@@ -25,6 +25,10 @@ on:
         description: "默认后台管理 IP"
         required: true
         default: "192.168.50.4"
+      lan_gateway:
+        description: "LAN 网关 (旁路由填主路由 IP)"
+        required: true
+        default: "192.168.50.1"
       router_mode:
         description: "路由模式 (决定 AdGuardHome 53 端口自动配置方式)"
         required: true
@@ -131,7 +135,8 @@ jobs:
 
       - name: 生成首次开机配置 (后台IP/时区/主机名/Docker防火墙)
         run: |
-          LAN_IP="${{ inputs.lan_ip }}" ENABLE_DOCKER="${{ inputs.enable_docker }}" \
+          LAN_IP="${{ inputs.lan_ip }}" LAN_GATEWAY="${{ inputs.lan_gateway }}" \
+            ENABLE_DOCKER="${{ inputs.enable_docker }}" \
             ROUTER_MODE="${{ inputs.router_mode }}" ENABLE_ADGUARDHOME="${{ inputs.enable_adguardhome }}" \
             ENABLE_TGCHECKIN="${{ inputs.enable_tgcheckin }}" \
             sh shell/gen-uci-defaults.sh
