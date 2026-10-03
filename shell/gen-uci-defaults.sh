@@ -1,6 +1,6 @@
 #!/bin/sh
 # 生成 files/etc/uci-defaults/99-custom (固件首次开机时执行一次)
-# 环境变量: LAN_IP, LAN_GATEWAY, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME, ENABLE_TGCHECKIN
+# 环境变量: LAN_IP, LAN_GATEWAY, ENABLE_DOCKER, ROUTER_MODE (bypass/main), ENABLE_ADGUARDHOME, ENABLE_TGCHECKIN, ENABLE_NIKKI
 OUT="files/etc/uci-defaults/99-custom"
 mkdir -p files/etc/uci-defaults
 
@@ -168,6 +168,25 @@ uci delete dhcp.@dnsmasq[0].address 2>/dev/null
 uci add_list dhcp.@dnsmasq[0].address='/router.local/router.lan/${LAN_GATEWAY:-192.168.50.1}'
 uci commit dhcp
 EOF
+
+# ---- Nikki 旁路由模式预置 (不启用, 备用) ----
+# 如安装了 luci-app-nikki, 按旁路由优化配置但保持关闭 (OpenClash 为主用)
+# 关键: Nikki 自身 IPv6 关闭 / TUN 关闭 / DNS 劫持关闭 (AdGuardHome 接管 DNS)
+if [ "$ENABLE_NIKKI" = "true" ]; then
+cat >> "$OUT" << 'EOF'
+
+# ---- Nikki (旁路由模式, 默认不启用) ----
+uci set nikki.config.enabled='0'
+uci set nikki.mixin.ipv6='0'
+uci set nikki.mixin.tun_enabled='0'
+uci set nikki.mixin.dns_ipv6='0'
+uci set nikki.mixin.dns_mode='redir-host'
+uci set nikki.proxy.udp_mode='redirect'
+uci set nikki.proxy.ipv4_dns_hijack='0'
+uci set nikki.proxy.ipv6_dns_hijack='0'
+uci commit nikki
+EOF
+fi
 
 if [ "$ENABLE_TGCHECKIN" = "true" ]; then
 cat >> "$OUT" << 'EOF'
