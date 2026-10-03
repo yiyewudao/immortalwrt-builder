@@ -28,6 +28,15 @@ uci set dhcp.lan.ignore='1'
 uci set dhcp.lan.dhcpv6='disabled'
 uci set dhcp.lan.ra='disabled'
 uci commit dhcp
+
+# ---- 旁路由模式: IPv6 自动获取 (DHCPv6 客户端, 挂在 lan 上) ----
+uci set network.lan6='interface'
+uci set network.lan6.proto='dhcpv6'
+uci set network.lan6.device='@lan'
+uci set network.lan6.reqaddress='try'
+uci set network.lan6.reqprefix='auto'
+uci set network.lan6.norelease='1'
+uci commit network
 EOF
 fi
 
