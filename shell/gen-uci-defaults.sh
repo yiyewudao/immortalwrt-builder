@@ -48,26 +48,31 @@ fi
 if [ "$ENABLE_DOCKER" = "true" ]; then
 cat >> "$OUT" << 'EOF'
 
-# ---- Docker 防火墙 (fw4, v4+v6): LAN 可访问容器, 容器可上网 ----
-uci add firewall zone > /dev/null
-uci set firewall.@zone[-1].name='docker'
-uci set firewall.@zone[-1].input='ACCEPT'
-uci set firewall.@zone[-1].output='ACCEPT'
-uci set firewall.@zone[-1].forward='ACCEPT'
-uci set firewall.@zone[-1].device='docker0'
-uci set firewall.@zone[-1].masq='1'
-uci set firewall.@zone[-1].mtu_fix='1'
-uci add firewall forwarding > /dev/null
-uci set firewall.@forwarding[-1].src='lan'
-uci set firewall.@forwarding[-1].dest='docker'
-uci add firewall forwarding > /dev/null
-uci set firewall.@forwarding[-1].src='docker'
-uci set firewall.@forwarding[-1].dest='lan'
-uci add firewall forwarding > /dev/null
-uci set firewall.@forwarding[-1].src='docker'
-uci set firewall.@forwarding[-1].dest='wan'
-uci commit firewall
-/etc/init.d/firewall reload > /dev/null 2>&1 || true
+# ---- Docker 防火墙 ----
+# 注意: ImmortalWrt 25.12 的 fw4 渲染 docker zone 的 device='docker0' 会报
+# "The rendered ruleset contains errors" 导致整个防火墙无法重启，进而
+# OpenClash 的 nftables 规则加不上去 (50.2 实测)。旁路由场景下 Docker 非必需，
+# 故默认不创建 docker zone。如需 Docker，自行在 LuCI 防火墙里手动添加。
+# (原配置已注释掉，保留备查)
+# uci add firewall zone > /dev/null
+# uci set firewall.@zone[-1].name='docker'
+# uci set firewall.@zone[-1].input='ACCEPT'
+# uci set firewall.@zone[-1].output='ACCEPT'
+# uci set firewall.@zone[-1].forward='ACCEPT'
+# uci set firewall.@zone[-1].device='docker0'
+# uci set firewall.@zone[-1].masq='1'
+# uci set firewall.@zone[-1].mtu_fix='1'
+# uci add firewall forwarding > /dev/null
+# uci set firewall.@forwarding[-1].src='lan'
+# uci set firewall.@forwarding[-1].dest='docker'
+# uci add firewall forwarding > /dev/null
+# uci set firewall.@forwarding[-1].src='docker'
+# uci set firewall.@forwarding[-1].dest='lan'
+# uci add firewall forwarding > /dev/null
+# uci set firewall.@forwarding[-1].src='docker'
+# uci set firewall.@forwarding[-1].dest='wan'
+# uci commit firewall
+# /etc/init.d/firewall reload > /dev/null 2>&1 || true
 EOF
 fi
 
@@ -106,7 +111,10 @@ fi
 
 # ---- dnsmasq: router.local 指向网关 (修 192.168.0.1 残留) ----
 # 注意: dnsmasq 自带的 "DNS 重定向" 保持关闭, DNS 劫持只由 AdGuardHome 做;
-# AdGuardHome 上游手动设为 127.0.0.1:5353 (OpenClash DNS), 链路: 客户端→AdGuardHome→OpenClash→上游
+# AdGuardHome 上游手动设为 127.0.0.1:7874 (OpenClash DNS 的 listen 端口, 见你的
+# Clash YAML 里 dns.listen 字段, 本例为 7874; fake-ip 模式必须走这里才能拿到
+# 198.18.x.x), 链路: 客户端→AdGuardHome(53)→OpenClash DNS(7874)→上游。
+# 另加 127.0.0.1:5335 做本地解析 (router.local 等走 dnsmasq)。
 cat >> "$OUT" << EOF
 uci delete dhcp.@dnsmasq[0].address 2>/dev/null
 uci add_list dhcp.@dnsmasq[0].address='/router.local/router.lan/${LAN_GATEWAY:-192.168.50.1}'
