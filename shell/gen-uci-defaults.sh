@@ -22,8 +22,10 @@ EOF
 if [ "${ROUTER_MODE:-bypass}" = "bypass" ]; then
 cat >> "$OUT" << 'EOF'
 
-# ---- 旁路由模式: DHCPv4 服务已关闭 (主路由负责分配) ----
+# ---- 旁路由模式: DHCPv4/DHCPv6/RA 服务已关闭 (主路由负责分配) ----
 uci set dhcp.lan.ignore='1'
+uci set dhcp.lan.dhcpv6='disabled'
+uci set dhcp.lan.ra='disabled'
 uci commit dhcp
 EOF
 fi
