@@ -92,6 +92,32 @@ uci commit AdGuardHome
 # dnsmasq DNS 让到 5335 端口 (53 给 AdGuardHome, 本地解析走 5335)
 uci set dhcp.@dnsmasq[0].port='5335'
 uci commit dhcp
+# AdGuardHome 上游指向 OpenClash DNS (127.0.0.1:7874), 否则 DNS 绕过 Clash
+# 等待 AdGuardHome 生成配置文件后修改 (首次启动时)
+(
+for _i in $(seq 1 30); do
+  [ -f /etc/AdGuardHome.yaml ] && break
+  sleep 10
+done
+[ -f /etc/AdGuardHome.yaml ] || exit 0
+# 备份原配置
+cp /etc/AdGuardHome.yaml /etc/AdGuardHome.yaml.bak 2>/dev/null
+# 用 python3 修改 upstream_dns (如无 python3 则跳过, 需手动在 UI 里改)
+python3 << 'PYEOF' 2>/dev/null || exit 0
+import re
+p = '/etc/AdGuardHome.yaml'
+s = open(p).read()
+# 替换 upstream_dns 段为 7874 + 公网 DoH
+new_upstream = """  upstream_dns:
+    - 127.0.0.1:7874
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query"""
+s = re.sub(r'  upstream_dns:.*?(?=\n  [a-z_]+:)', new_upstream + '\n', s, flags=re.DOTALL)
+open(p, 'w').write(s)
+PYEOF
+# 重启 AdGuardHome 生效
+/etc/init.d/AdGuardHome restart 2>/dev/null || true
+) &
 EOF
 else
 # 主路由: AdGuardHome 直接占用53替换 dnsmasq，dnsmasq 仅保留 DHCP
@@ -105,15 +131,37 @@ uci commit AdGuardHome
 # dnsmasq DNS 让到 5335 端口 (53 给 AdGuardHome, 本地解析走 5335)
 uci set dhcp.@dnsmasq[0].port='5335'
 uci commit dhcp
+# AdGuardHome 上游指向 OpenClash DNS (127.0.0.1:7874), 否则 DNS 绕过 Clash
+# 等待 AdGuardHome 生成配置文件后修改 (首次启动时)
+(
+for _i in $(seq 1 30); do
+  [ -f /etc/AdGuardHome.yaml ] && break
+  sleep 10
+done
+[ -f /etc/AdGuardHome.yaml ] || exit 0
+cp /etc/AdGuardHome.yaml /etc/AdGuardHome.yaml.bak 2>/dev/null
+python3 << 'PYEOF' 2>/dev/null || exit 0
+import re
+p = '/etc/AdGuardHome.yaml'
+s = open(p).read()
+new_upstream = """  upstream_dns:
+    - 127.0.0.1:7874
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query"""
+s = re.sub(r'  upstream_dns:.*?(?=\n  [a-z_]+:)', new_upstream + '\n', s, flags=re.DOTALL)
+open(p, 'w').write(s)
+PYEOF
+/etc/init.d/AdGuardHome restart 2>/dev/null || true
+) &
 EOF
 fi
 fi
 
 # ---- dnsmasq: router.local 指向网关 (修 192.168.0.1 残留) ----
 # 注意: dnsmasq 自带的 "DNS 重定向" 保持关闭, DNS 劫持只由 AdGuardHome 做;
-# AdGuardHome 上游手动设为 127.0.0.1:7874 (OpenClash DNS 的 listen 端口, 见你的
-# Clash YAML 里 dns.listen 字段, 本例为 7874; fake-ip 模式必须走这里才能拿到
-# 198.18.x.x), 链路: 客户端→AdGuardHome(53)→OpenClash DNS(7874)→上游。
+# AdGuardHome 上游自动设为 127.0.0.1:7874 (OpenClash DNS 的 listen 端口, 见你的
+# Clash YAML 里 dns.listen 字段, 本例为 7874; redir-host 模式下返回真实 IP,
+# AGH 可放心开缓存), 链路: 客户端→AdGuardHome(53)→OpenClash DNS(7874)→上游。
 # 另加 127.0.0.1:5335 做本地解析 (router.local 等走 dnsmasq)。
 cat >> "$OUT" << EOF
 uci delete dhcp.@dnsmasq[0].address 2>/dev/null
