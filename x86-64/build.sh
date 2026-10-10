@@ -34,8 +34,10 @@ fi
 if [ "$ENABLE_OPENCLASH" = "true" ]; then
   echo "🔄 下载 OpenClash 内核..."
   mkdir -p files/etc/openclash/core
-  wget -qO- https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64-v1.tar.gz \
-    | tar xOvz > files/etc/openclash/core/clash_meta
+  # 只用正式版: MetaCubeX/mihomo 的 releases/latest (自动排除 prerelease/beta)
+  # 注: 之前用 vernesong/OpenClash core/master 分支, 是浮动版本, 可能拉到测试版内核
+  wget -qO- https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64-v1.gz \
+    | gunzip -c > files/etc/openclash/core/clash_meta
   chmod +x files/etc/openclash/core/clash_meta
   wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat \
     -O files/etc/openclash/GeoIP.dat
